@@ -260,9 +260,9 @@
             { bg: 'bg-indigo-50', border: 'border-indigo-400', text: 'text-indigo-900' },
             { bg: 'bg-rose-50', border: 'border-rose-400', text: 'text-rose-900' }
         ];
-
+        
         // ==========================================================
-        //  UPDATED createChatterTable FUNCTION (WITH CENTERED CIRCLES)
+        //  *** CORRECTED createChatterTable FUNCTION ***
         // ==========================================================
         function createChatterTable(chatter, modelsData, quarterLabels) {
             modelsData.sort((a, b) => a.model.localeCompare(b.model));
@@ -338,7 +338,6 @@
                         if (modelEntry) {
                             const bottomBorder = isLastMetric ? `border-b ${color.border}` : '';
                             html += `<td class="px-1 py-1 text-gray-600 ${color.bg} font-medium border-l ${color.border} ${bottomBorder}" style="border-left-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${metric.label}</td>`;
-
                             let total = 0;
                             const quarterValues = [];
                             
@@ -365,9 +364,10 @@
                                         const prevValue = quarterValues[slotIdx - 1];
 
                                         // ===========================================
-                                        //   FIX FOR CENTERING CIRCLES
+                                        //   *** START OF FIX ***
                                         // ===========================================
-                                        const baseCircleStyle = 'display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-weight: bold;';
+                                        // Use 32px circle and add box-sizing
+                                        const baseCircleStyle = 'display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-weight: bold; box-sizing: border-box;';
 
                                         if (value < prevValue) {
                                             outlineStyle = `${baseCircleStyle} border: 2px solid #EF4444; color: #EF4444;`; // Red
@@ -377,18 +377,21 @@
                                             outlineStyle = `${baseCircleStyle} border: 2px solid #10B981; color: #10B981;`; // Green
                                         }
                                         // ===========================================
-                                        //   END OF FIX
+                                        //   *** END OF FIX ***
                                         // ===========================================
                                     }
                                 }
-
-                                html += `<td class="px-1 py-1 text-center text-gray-900 ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap;">
+                                
+                                // Add vertical-align: middle to the table cell's style
+                                html += `<td class="px-1 py-1 text-center text-gray-900 ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">
                                     ${outlineStyle ? `<span style="${outlineStyle}">${displayValue}</span>` : displayValue}
                                 </td>`;
                             });
 
                             const displayTotal = metric.isCurrency ? `$${total.toFixed(2)}` : total;
-                            html += `<td class="px-1 py-1 text-center font-bold text-gray-900 ${color.bg} border-r ${color.border} ${bottomBorder}" style="border-right-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayTotal}</td>`;
+                            
+                            // Add vertical-align: middle to the total cell's style
+                            html += `<td class="px-1 py-1 text-center font-bold text-gray-900 ${color.bg} border-r ${color.border} ${bottomBorder}" style="border-right-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;">${displayTotal}</td>`;
 
                         } else {
                             html += `<td colspan="${maxQuarters + 2}" class="px-1 py-1 bg-gray-50"></td>`;
