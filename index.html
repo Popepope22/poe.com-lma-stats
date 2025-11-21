@@ -1,14 +1,16 @@
-<!DOCTYPE html><html lang="en"><head>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatter Performance Tracker</title>
-    
+    <title>Chatter Performance Tracker (With Response Time)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         @media print {
-            .no-print { display: none; }
+            .no-print { display: none !important; }
             .page-break-after { page-break-after: always; }
             body { font-size: 10pt; }
             * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
@@ -16,69 +18,61 @@
         @media screen {
             .page-break-after { margin-bottom: 2rem; }
         }
-        /* This is hidden by default */
-        .screenshot-only {
-            display: none;
-        }
-    </style></head><body class="bg-white min-h-screen">
-    <div class="container mx-auto p-4 max-w-7xl">
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-white min-h-screen pb-20">
 
+    <div class="container mx-auto p-4 max-w-7xl">
+        
         <div class="mb-6 flex justify-between items-start">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">Chatter Performance Tracker</h1>
-                <p class="text-gray-600">Upload up to 4 CSV files (one per quarter) to track chatter performance by model</p>
+                <p class="text-gray-600">Track performance against targets (Revenue, Messages, Fans, PPVs, Response Time).</p>
             </div>
         </div>
 
+        <div id="debug-banner" class="hidden mb-4 p-2 bg-blue-50 text-blue-800 text-xs font-mono border border-blue-200 rounded"></div>
+
         <div class="bg-gray-50 rounded-lg p-6 mb-6 no-print">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold text-gray-900">Upload CSV Files</h2>
+                <h2 class="text-xl font-semibold text-gray-900">1. Upload CSV Files</h2>
                 <span id="allocation-status" class="text-sm text-gray-600"></span>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Upload 1-4 CSV files. You can upload files incrementally as they become available.</p>
+            <p class="text-sm text-gray-600 mb-4">Upload 1-4 CSV files (representing 2-hour quarters).</p>
+
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                        Quarter 1
-                        <span id="q1-status" class="text-xs"></span>
-                    </label>
-                    <input type="file" accept=".csv" id="file-q1" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
+                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 1 <span id="q1-status" class="text-xs"></span></label>
+                    <input type="file" accept=".csv" id="file-q1" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                        Quarter 2
-                        <span id="q2-status" class="text-xs"></span>
-                    </label>
-                    <input type="file" accept=".csv" id="file-q2" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
+                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 2 <span id="q2-status" class="text-xs"></span></label>
+                    <input type="file" accept=".csv" id="file-q2" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                        Quarter 3
-                        <span id="q3-status" class="text-xs"></span>
-                    </label>
-                    <input type="file" accept=".csv" id="file-q3" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
+                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 3 <span id="q3-status" class="text-xs"></span></label>
+                    <input type="file" accept=".csv" id="file-q3" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                        Quarter 4
-                        <span id="q4-status" class="text-xs"></span>
-                    </label>
-                    <input type="file" accept=".csv" id="file-q4" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
+                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 4 <span id="q4-status" class="text-xs"></span></label>
+                    <input type="file" accept=".csv" id="file-q4" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
             </div>
+
             <div class="flex gap-3">
-                <button id="process-btn" class="flex-1 bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-3 px-6 rounded-md transition duration-200">
-                    Process Files
-                </button>
-                <button id="clear-all-btn" onclick="clearAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-md transition duration-200">
-                    Clear All
-                </button>
+                <button id="process-btn" class="flex-1 bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-3 px-6 rounded-md transition duration-200">Process Files</button>
+                <button id="clear-all-btn" onclick="clearAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Clear All</button>
             </div>
         </div>
 
         <div id="allocation-section" class="hidden no-print">
             <div class="bg-gray-50 rounded-lg p-6 mb-6">
-                <h2 class="text-2xl font-semibold text-gray-900 mb-4">Allocate Chatters to Groups</h2>
+                <h2 class="text-2xl font-semibold text-gray-900 mb-4">2. Allocate Chatters to Groups</h2>
+                
                 <div class="flex border-b border-gray-300 mb-6">
                     <button class="shift-tab px-6 py-3 font-semibold text-white bg-[#5D5CDE] rounded-t-lg" data-shift="1">Shift 1</button>
                     <button class="shift-tab px-6 py-3 font-semibold text-gray-600 hover:bg-gray-200 rounded-t-lg" data-shift="2">Shift 2</button>
@@ -131,12 +125,8 @@
                 </div>
 
                 <div class="flex gap-3 mt-6">
-                    <button onclick="lockAllocations()" id="lock-allocations-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-md transition duration-200">
-                        Lock Allocations & Process Data
-                    </button>
-                    <button onclick="resetAllocations()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-md transition duration-200">
-                        Reset All
-                    </button>
+                    <button onclick="lockAllocations()" id="lock-allocations-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Lock Allocations & View Report</button>
+                    <button onclick="resetAllocations()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-md transition duration-200">Reset All</button>
                 </div>
             </div>
         </div>
@@ -145,16 +135,11 @@
             <div class="flex justify-between items-center mb-4 no-print">
                 <h2 class="text-2xl font-semibold text-gray-900">Performance Results</h2>
                 <div class="flex gap-3">
-                    <button onclick="showAllocationSection()" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md transition duration-200 no-print">
-                        Edit Allocations
-                    </button>
-                    <button onclick="window.print()" class="bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-2 px-4 rounded-md transition duration-200">
-                        Print Report
-                    </button>
+                    <button onclick="showAllocationSection()" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-md transition duration-200 no-print">Edit Allocations</button>
+                    <button onclick="window.print()" class="bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-2 px-4 rounded-md transition duration-200">Print Report</button>
                 </div>
             </div>
-            <div id="results-container" class="space-y-8">
-                </div>
+            <div id="results-container" class="space-y-8"></div>
         </div>
 
         <div id="error-container" class="hidden">
@@ -163,33 +148,63 @@
                 <p id="error-message" class="text-red-600 text-sm mt-1"></p>
             </div>
         </div>
-
     </div>
 
     <script>
-        // Data storage
-        const quarterData = {
-            q1: null,
-            q2: null,
-            q3: null,
-            q4: null
+        // --- DEFAULT TARGETS ---
+        const DEFAULT_TARGETS = {
+            messagesSent: 0,  // 55/hr * 2
+            fansChatted: 0,    // 7.5/hr * 2
+            ppvsSent: 0,       // ~15/hr * 2 (Estimate)
+            ppvsOpen: 0,       // Daily target / 4 shifts
+            revenue: 0,       // $140/hr * 2
+            responseTime: 6     // Minutes (Lower is better)
         };
 
-        // Allocation data
+        // Data storage
+        const quarterData = { q1: null, q2: null, q3: null, q4: null };
         let allChatters = [];
         let allModels = {};
-        const shiftAllocations = {
-            1: { groups: [] },
-            2: { groups: [] },
-            3: { groups: [] }
-        };
+        const shiftAllocations = { 1: { groups: [] }, 2: { groups: [] }, 3: { groups: [] } };
         let chatterModels = {};
         let selectedChattersForAssignment = [];
         let allocationsLocked = false;
         
-        // --- NEW ---
-        // Storage for model visibility preferences
-        let modelVisibility = {};
+        // Storage for user preferences
+        let modelVisibility = {}; 
+        let modelTargets = {};    
+
+        // Helper: Parse Time Strings (Safe Version)
+        // Converts "3m 20s", "1h", or "5" into Minutes (Float)
+        function parseTimeDuration(timeStr) {
+            if (!timeStr) return 0;
+            timeStr = timeStr.toString().toLowerCase().trim();
+            if (timeStr === '-' || timeStr === '') return 0;
+            
+            let minutes = 0;
+            const h = timeStr.match(/(\d+)\s*h/);
+            const m = timeStr.match(/(\d+)\s*m/);
+            const s = timeStr.match(/(\d+)\s*s/);
+
+            if (h) minutes += parseInt(h[1]) * 60;
+            if (m) minutes += parseInt(m[1]);
+            if (s) minutes += parseInt(s[1]) / 60;
+            
+            // Fallback for plain numbers
+            if (!h && !m && !s && !isNaN(parseFloat(timeStr))) {
+                minutes = parseFloat(timeStr);
+            }
+            return minutes;
+        }
+
+        // Helper: Format Minutes back to "3m 20s"
+        function formatTimeDuration(totalMinutes) {
+            if (totalMinutes === 0 || totalMinutes === undefined || totalMinutes === null) return "-";
+            const m = Math.floor(totalMinutes);
+            const s = Math.round((totalMinutes - m) * 60);
+            if (m === 0 && s === 0) return "0m 0s";
+            return `${m}m ${s}s`;
+        }
 
         // Parse CSV file
         function parseCSV(file) {
@@ -204,20 +219,73 @@
         }
 
         // Process data from CSV
-        function processData(data) {
+        function processData(data, quarterName) {
             const processed = {};
+            
+            // Auto-Detect Columns
+            let revenueKey = null;
+            let responseTimeKey = null;
+
+            if (data.length > 0) {
+                const keys = Object.keys(data[0]);
+                
+                // 1. Revenue Detection
+                const priorities = ['sales', 'total net earnings', 'earnings', 'gross earnings'];
+                for (const p of priorities) {
+                    const found = keys.find(k => k.toLowerCase().trim() === p);
+                    if (found) { revenueKey = found; break; }
+                }
+                if (!revenueKey) {
+                    revenueKey = keys.find(k => k.toLowerCase().includes('sales')) || 
+                                 keys.find(k => k.toLowerCase().includes('revenue'));
+                }
+
+                // 2. Response Time Detection
+                // Look for "response time"
+                responseTimeKey = keys.find(k => k.toLowerCase().includes('response time'));
+
+                // Debug Info to help verify columns
+                const debugEl = document.getElementById('debug-banner');
+                let msg = `[${quarterName}] Revenue: ${revenueKey || '❌'} | Response: ${responseTimeKey || '❌'}`;
+                if (debugEl.innerHTML === "") debugEl.classList.remove('hidden');
+                if (!debugEl.innerHTML.includes(quarterName)) {
+                    debugEl.innerHTML += (debugEl.innerHTML ? ' | ' : '') + msg;
+                }
+            }
+
             data.forEach(row => {
                 const chatter = row['Employees'];
                 const model = row['Creators'];
+                
+                // Extract Metrics
                 const messagesSent = parseInt(row['Direct messages sent']) || 0;
                 const ppvsSent = parseInt(row['Direct PPVs sent']) || 0;
                 const ppvsOpen = parseInt(row['PPVs unlocked']) || 0;
                 const fansChatted = parseInt(row['Fans chatted']) || 0;
+                
+                // Extract Revenue
+                let revenue = 0;
+                if (revenueKey && row[revenueKey]) {
+                    const cleanVal = row[revenueKey].toString().replace(/[^0-9.-]+/g, "");
+                    revenue = parseFloat(cleanVal);
+                }
+                if(isNaN(revenue)) revenue = 0;
+
+                // Extract Response Time
+                let responseTime = 0;
+                let hasValidResponse = false;
+                if (responseTimeKey && row[responseTimeKey]) {
+                    const val = row[responseTimeKey].toString();
+                    // Check for non-empty, non-dash values
+                    if (val.trim() !== '-' && val.trim() !== '') {
+                        responseTime = parseTimeDuration(val);
+                        hasValidResponse = true;
+                    }
+                }
 
                 if (!chatter || !model) return;
 
                 const key = `${chatter}|||${model}`;
-
                 if (!processed[key]) {
                     processed[key] = {
                         chatter,
@@ -225,31 +293,29 @@
                         fansChatted,
                         messagesSent,
                         ppvsSent,
-                        ppvsOpen
+                        ppvsOpen,
+                        revenue,
+                        // Store time sums and counts for averaging
+                        responseTimeSum: hasValidResponse ? responseTime : 0,
+                        responseCount: hasValidResponse ? 1 : 0
                     };
                 } else {
                     processed[key].fansChatted += fansChatted;
                     processed[key].messagesSent += messagesSent;
                     processed[key].ppvsSent += ppvsSent;
                     processed[key].ppvsOpen += ppvsOpen;
+                    processed[key].revenue += revenue;
+                    
+                    if (hasValidResponse) {
+                        processed[key].responseTimeSum += responseTime;
+                        processed[key].responseCount += 1;
+                    }
                 }
             });
             return Object.values(processed);
         }
 
-        // Group data by chatter
-        function groupByChatter(processedData) {
-            const grouped = {};
-            processedData.forEach(entry => {
-                if (!grouped[entry.chatter]) {
-                    grouped[entry.chatter] = [];
-                }
-                grouped[entry.chatter].push(entry);
-            });
-            return grouped;
-        }
-
-        // Color palette for models
+        // Color palette
         const modelColors = [
             { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-900' },
             { bg: 'bg-green-50', border: 'border-green-400', text: 'text-green-900' },
@@ -260,20 +326,10 @@
             { bg: 'bg-indigo-50', border: 'border-indigo-400', text: 'text-indigo-900' },
             { bg: 'bg-rose-50', border: 'border-rose-400', text: 'text-rose-900' }
         ];
-        
-        // ==========================================================
-        //  *** CORRECTED createChatterTable FUNCTION ***
-        // ==========================================================
+
         function createChatterTable(chatter, modelsData, quarterLabels) {
             modelsData.sort((a, b) => a.model.localeCompare(b.model));
-
-            const metrics = [
-                { label: 'Fans chatted with', key: 'fansChatted' },
-                { label: 'Messages sent', key: 'messagesSent' },
-                { label: 'PPVs sent', key: 'ppvsSent' },
-                { label: 'PPVs open', key: 'ppvsOpen' }
-            ];
-
+            
             const maxQuarters = 4;
             const allQuarterSlots = ['Q1', 'Q2', 'Q3', 'Q4'];
             const modelsPerRow = 3;
@@ -304,18 +360,21 @@
                             <thead class="bg-gray-100">
                                 <tr>
                 `;
-
+                
+                // HEADER ROW
                 rowModels.forEach((modelEntry, idx) => {
                     const colorIdx = (rowIdx * modelsPerRow + idx) % modelColors.length;
                     const color = modelColors[colorIdx];
+                    
                     if (modelEntry) {
-                        html += `<th rowspan="2" class="px-1 py-1 text-left font-bold text-sm ${color.text} ${color.bg} border-b border-l border-t ${color.border}" style="width: 9%; border-width: 2px; white-space: nowrap;">${modelEntry.model}</th>`;
+                        html += `<th rowspan="2" class="px-1 py-1 text-left font-bold text-sm ${color.text} ${color.bg} border-b border-l border-t ${color.border}" style="width: 10%; border-width: 2px; white-space: nowrap;">${modelEntry.model}</th>`;
+                        html += `<th class="px-1 py-1 text-center font-bold text-yellow-800 italic bg-yellow-50 border-b border-t border-gray-300" style="width: 5%; border-width: 1px;">Target</th>`;
                         allQuarterSlots.forEach(q => {
                             html += `<th class="px-1 py-1 text-center font-semibold text-gray-700 ${color.bg} border-b border-t border-gray-300" style="width: 4.5%; border-width: 1px; white-space: nowrap;">${q}</th>`;
                         });
                         html += `<th class="px-1 py-1 text-center font-semibold text-gray-700 ${color.bg} border-b border-t border-r ${color.border}" style="width: 6.5%; border-width: 2px; white-space: nowrap;">Total</th>`;
                     } else {
-                        html += `<th colspan="${maxQuarters + 2}" class="px-1 py-1 bg-gray-50 border-b border-gray-300" style="width: 33.33%; border-width: 1px;"></th>`;
+                        html += `<th colspan="${maxQuarters + 3}" class="px-1 py-1 bg-gray-50 border-b border-gray-300" style="width: 33.33%; border-width: 1px;"></th>`;
                     }
                 });
 
@@ -325,10 +384,20 @@
                             <tbody>
                 `;
 
-                metrics.forEach((metric, metricIdx) => {
-                    const isLastMetric = metricIdx === metrics.length - 1;
-                    const rowBg = metricIdx % 2 === 0 ? '' : 'bg-gray-50/50';
+                // METRICS DEFINITION - Including Response Time
+                const metricKeys = [
+                    { label: 'Fans chatted', key: 'fansChatted' },
+                    { label: 'Messages sent', key: 'messagesSent' },
+                    { label: 'PPVs sent', key: 'ppvsSent' },
+                    { label: 'PPVs open', key: 'ppvsOpen' },
+                    { label: 'Revenue', key: 'revenue', isCurrency: true },
+                    { label: 'Avg Response', key: 'responseTimeSum', isTime: true } // Added Response Time
+                ];
 
+                metricKeys.forEach((metricDef, metricIdx) => {
+                    const isLastMetric = metricIdx === metricKeys.length - 1;
+                    const rowBg = metricIdx % 2 === 0 ? '' : 'bg-gray-50/50';
+                    
                     html += `<tr class="${rowBg}">`;
 
                     rowModels.forEach((modelEntry, idx) => {
@@ -337,67 +406,104 @@
 
                         if (modelEntry) {
                             const bottomBorder = isLastMetric ? `border-b ${color.border}` : '';
-                            html += `<td class="px-1 py-1 text-gray-600 ${color.bg} font-medium border-l ${color.border} ${bottomBorder}" style="border-left-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${metric.label}</td>`;
-                            let total = 0;
-                            const quarterValues = [];
+                            
+                            const specificTargets = modelTargets[modelEntry.model] || DEFAULT_TARGETS;
+                            // Map 'responseTimeSum' to the config key 'responseTime'
+                            const targetKey = metricDef.isTime ? 'responseTime' : metricDef.key;
+                            const targetValue = specificTargets[targetKey];
+                            
+                            html += `<td class="px-1 py-1 text-gray-600 ${color.bg} font-medium border-l ${color.border} ${bottomBorder}" style="border-left-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${metricDef.label}</td>`;
+                            
+                            let targetDisplay = targetValue;
+                            if (metricDef.isCurrency) targetDisplay = `$${targetValue}`;
+                            if (metricDef.isTime) targetDisplay = `< ${targetValue}m`;
+
+                            html += `<td class="px-1 py-1 text-center text-gray-600 font-semibold italic bg-yellow-50 ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''}">${targetDisplay}</td>`;
+
+                            let totalSum = 0;
+                            let totalCount = 0;
                             
                             allQuarterSlots.forEach((quarterSlot, slotIdx) => {
                                 const quarterIdx = quarterLabels.indexOf(quarterSlot);
                                 let value = 0;
+                                let rawValue = 0;
+                                let isValidTime = false;
+                                
                                 if (quarterIdx >= 0 && modelEntry.quarters[quarterIdx]) {
-                                    value = modelEntry.quarters[quarterIdx][metric.key] || 0;
-                                }
-                                quarterValues.push(value);
-                            });
-
-                            allQuarterSlots.forEach((quarterSlot, slotIdx) => {
-                                const value = quarterValues[slotIdx];
-                                total += value;
-                                const displayValue = metric.isCurrency ? `$${value.toFixed(2)}` : value;
-
-                                let outlineStyle = '';
-                                if (slotIdx > 0) {
-                                    const prevQuarterIdx = quarterLabels.indexOf(allQuarterSlots[slotIdx - 1]);
-                                    const currentQuarterIdx = quarterLabels.indexOf(quarterSlot);
-
-                                    if (prevQuarterIdx >= 0 && currentQuarterIdx >= 0) {
-                                        const prevValue = quarterValues[slotIdx - 1];
-
-                                        // ===========================================
-                                        //   *** START OF FIX ***
-                                        // ===========================================
-                                        // Use 32px circle and add box-sizing
-                                        const baseCircleStyle = 'display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-weight: bold; box-sizing: border-box;';
-
-                                        if (value < prevValue) {
-                                            outlineStyle = `${baseCircleStyle} border: 2px solid #EF4444; color: #EF4444;`; // Red
-                                        } else if (value === prevValue) {
-                                            outlineStyle = `${baseCircleStyle} border: 2px solid #F97316; color: #F97316;`; // Orange
+                                    const qData = modelEntry.quarters[quarterIdx];
+                                    
+                                    if (metricDef.isTime) {
+                                        // Logic for Time: Use stored Sum and Count to get Avg
+                                        if (qData.responseCount > 0) {
+                                            rawValue = qData.responseTimeSum / qData.responseCount; // Avg for this specific quarter
+                                            isValidTime = true;
+                                            totalSum += qData.responseTimeSum;
+                                            totalCount += qData.responseCount;
                                         } else {
-                                            outlineStyle = `${baseCircleStyle} border: 2px solid #10B981; color: #10B981;`; // Green
+                                            rawValue = 0;
                                         }
-                                        // ===========================================
-                                        //   *** END OF FIX ***
-                                        // ===========================================
+                                    } else {
+                                        // Logic for Numbers: Just Sum
+                                        rawValue = qData[metricDef.key] || 0;
+                                        totalSum += rawValue;
                                     }
+                                    value = rawValue;
+                                }
+
+                                let displayValue = value;
+                                if (metricDef.isCurrency) displayValue = `$${value.toFixed(0)}`;
+                                if (metricDef.isTime) {
+                                    displayValue = isValidTime ? formatTimeDuration(value) : '-';
+                                } else if (value === 0) {
+                                    displayValue = '-';
                                 }
                                 
-                                // Add vertical-align: middle to the table cell's style
-                                html += `<td class="px-1 py-1 text-center text-gray-900 ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">
-                                    ${outlineStyle ? `<span style="${outlineStyle}">${displayValue}</span>` : displayValue}
+                                let textColor = 'text-gray-900';
+                                let fontWeight = 'font-normal';
+                                
+                                // Coloring
+                                if (quarterIdx >= 0 && modelEntry.quarters[quarterIdx]) {
+                                     // Only color if we have valid data
+                                     const hasData = metricDef.isTime ? isValidTime : value > 0;
+                                     if (hasData) {
+                                         if (metricDef.isTime) {
+                                             // LOWER IS BETTER for time
+                                             if (value > targetValue) {
+                                                 textColor = 'text-red-600'; fontWeight = 'font-bold';
+                                             } else {
+                                                 textColor = 'text-green-600'; fontWeight = 'font-bold';
+                                             }
+                                         } else {
+                                             // HIGHER IS BETTER for others
+                                             if (value < targetValue) {
+                                                 textColor = 'text-red-600'; fontWeight = 'font-bold';
+                                             } else {
+                                                 textColor = 'text-green-600'; fontWeight = 'font-bold';
+                                             }
+                                         }
+                                     }
+                                }
+
+                                html += `<td class="px-1 py-1 text-center ${textColor} ${fontWeight} ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">
+                                    ${displayValue}
                                 </td>`;
                             });
 
-                            const displayTotal = metric.isCurrency ? `$${total.toFixed(2)}` : total;
-                            
-                            // Add vertical-align: middle to the total cell's style
-                            html += `<td class="px-1 py-1 text-center font-bold text-gray-900 ${color.bg} border-r ${color.border} ${bottomBorder}" style="border-right-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;">${displayTotal}</td>`;
+                            // Total Column Calculation
+                            let finalTotal = totalSum;
+                            if (metricDef.isTime && totalCount > 0) {
+                                finalTotal = totalSum / totalCount; // Weighted average for time
+                            }
 
+                            let displayTotal = finalTotal;
+                            if (metricDef.isCurrency) displayTotal = `$${finalTotal.toFixed(2)}`;
+                            if (metricDef.isTime) displayTotal = totalCount > 0 ? formatTimeDuration(finalTotal) : '-';
+
+                            html += `<td class="px-1 py-1 text-center font-bold text-gray-900 ${color.bg} border-r ${color.border} ${bottomBorder}" style="border-right-width: 2px; ${isLastMetric ? 'border-bottom-width: 2px;' : ''} white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;">${displayTotal}</td>`;
                         } else {
-                            html += `<td colspan="${maxQuarters + 2}" class="px-1 py-1 bg-gray-50"></td>`;
+                            html += `<td colspan="${maxQuarters + 3}" class="px-1 py-1 bg-gray-50"></td>`;
                         }
                     });
-
                     html += `</tr>`;
                 });
 
@@ -417,18 +523,22 @@
             const errorContainer = document.getElementById('error-container');
             const errorMessage = document.getElementById('error-message');
             const allocationSection = document.getElementById('allocation-section');
+            document.getElementById('debug-banner').innerHTML = ""; 
+            document.getElementById('debug-banner').classList.add('hidden');
+            
             errorContainer.classList.add('hidden');
-
+            
             try {
                 const quarters = ['q1', 'q2', 'q3', 'q4'];
                 const quarterLabels = [];
-
+                
                 for (let i = 0; i < quarters.length; i++) {
                     const fileInput = document.getElementById(`file-${quarters[i]}`);
                     const statusEl = document.getElementById(`${quarters[i]}-status`);
+                    
                     if (fileInput.files.length > 0) {
                         const data = await parseCSV(fileInput.files[0]);
-                        quarterData[quarters[i]] = processData(data);
+                        quarterData[quarters[i]] = processData(data, `Q${i+1}`);
                         quarterLabels.push(`Q${i + 1}`);
                         statusEl.textContent = '✓';
                         statusEl.className = 'text-xs text-green-600';
@@ -453,10 +563,11 @@
                         });
                     }
                 });
-                allChatters = Array.from(allChattersSet).sort();
 
+                allChatters = Array.from(allChattersSet).sort();
                 chatterModels = {};
                 allModels = {};
+
                 allChatters.forEach(chatter => {
                     const models = new Set();
                     quarters.forEach(q => {
@@ -468,7 +579,9 @@
                             });
                         }
                     });
+                    
                     allModels[chatter] = Array.from(models);
+                    
                     chatterModels[chatter] = Array.from(models).map(model => {
                         const quarterValues = quarters.map((q, idx) => {
                             if (quarterData[q]) {
@@ -495,7 +608,6 @@
             }
         }
 
-        // Update allocation status display
         function updateAllocationStatus() {
             const statusEl = document.getElementById('allocation-status');
             if (allocationsLocked) {
@@ -506,7 +618,6 @@
             }
         }
 
-        // Initialize allocation interface
         function initializeAllocation() {
             if (allocationsLocked) {
                 for (let shift = 1; shift <= 3; shift++) {
@@ -516,20 +627,17 @@
                 document.getElementById('lock-allocations-btn').classList.add('opacity-50', 'cursor-not-allowed');
                 return;
             }
-
             for (let shift = 1; shift <= 3; shift++) {
                 renderUnassignedChatters(shift);
                 renderGroups(shift);
             }
         }
 
-        // Lock allocations and generate report
         function lockAllocations() {
             if (allocationsLocked) {
                 generateReport();
                 return;
             }
-
             let hasAllocations = false;
             for (let shift = 1; shift <= 3; shift++) {
                 if (shiftAllocations[shift].groups.some(g => g.chatters.length > 0)) {
@@ -545,14 +653,12 @@
             generateReport();
         }
 
-        // Reset all allocations
         function resetAllocations() {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
                     <p class="text-gray-700 mb-4 font-semibold">Are you sure you want to reset all allocations?</p>
-                    <p class="text-gray-600 text-sm mb-4">This will clear all groups, chatter assignments, and model visibility settings.</p>
                     <div class="flex justify-end gap-3">
                         <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
                         <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmReset(); this.closest('.fixed').remove()">Reset All</button>
@@ -566,19 +672,17 @@
             shiftAllocations[1].groups = [];
             shiftAllocations[2].groups = [];
             shiftAllocations[3].groups = [];
-            
-            // --- MODIFIED ---
-            modelVisibility = {}; // Reset model visibility
+            modelVisibility = {}; 
+            modelTargets = {};
             allocationsLocked = false;
-            
-            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & Process Data';
+            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
             updateAllocationStatus();
             initializeAllocation();
+            document.getElementById('debug-banner').innerHTML = "";
+            document.getElementById('debug-banner').classList.add('hidden');
         }
 
-        // --- ⬇⬇⬇ CHATTER SEARCH ⬇⬇⬇ ---
-                // Render unassigned chatters
         function renderUnassignedChatters(shift) {
             const container = document.getElementById(`shift-${shift}-unassigned`);
             const assignedChatters = new Set();
@@ -587,26 +691,28 @@
             });
 
             const unassigned = allChatters.filter(c => !assignedChatters.has(c));
-
             const searchInput = document.getElementById(`chatter-search-input-${shift}`);
             const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+            
             const filteredUnassigned = unassigned.filter(c => 
                 c.toLowerCase().includes(searchTerm)
             );
 
             if (filteredUnassigned.length === 0) {
-                 if (searchTerm) {
+                if (searchTerm) {
                     container.innerHTML = `<p class="text-gray-500 text-sm">No chatters found matching "${searchTerm}"</p>`;
-                 } else {
+                } else {
                     container.innerHTML = '<p class="text-gray-500 text-sm">All chatters have been assigned</p>';
-                 }
+                }
                 return;
             }
-            const isAssignmentMode = currentAssignmentShift === shift;
 
+            const isAssignmentMode = currentAssignmentShift === shift;
+            
             container.innerHTML = filteredUnassigned.map(chatter => {
                 const isSelected = selectedChattersForAssignment.includes(chatter);
                 let bgClass, hoverClass;
+                
                 if (isAssignmentMode) {
                     bgClass = isSelected ? 'bg-[#5D5CDE]' : 'bg-green-200';
                     hoverClass = isSelected ? 'hover:bg-[#4D4CCE]' : 'hover:bg-green-300';
@@ -614,7 +720,9 @@
                     bgClass = 'bg-gray-200';
                     hoverClass = 'hover:bg-gray-300';
                 }
+                
                 const textColor = isSelected ? 'text-white' : 'text-gray-800';
+                
                 return `<span class="chatter-tag ${bgClass} ${textColor} px-3 py-2 rounded-md text-sm cursor-pointer ${hoverClass}" data-chatter="${chatter}">${chatter}${isSelected ? ' ✓' : ''}</span>`;
             }).join('');
 
@@ -634,7 +742,6 @@
             }
         }
 
-        // Add group
         function addGroup(shift) {
             const groupNameInput = document.getElementById(`shift-${shift}-group-name`);
             const managerNameInput = document.getElementById(`shift-${shift}-manager-name`);
@@ -645,27 +752,27 @@
                 showCustomAlert('Please enter both group name and manager name');
                 return;
             }
+
             const group = {
                 id: Date.now(),
                 name: groupName,
                 manager: managerName,
                 chatters: []
             };
+
             shiftAllocations[shift].groups.push(group);
             groupNameInput.value = '';
             managerNameInput.value = '';
             renderGroups(shift);
         }
 
-        // --- NEW ---
-        // Edit group (show modal)
         function editGroup(shift, groupId) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (!group) return;
 
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.id = 'edit-group-modal'; // Give modal an ID to remove it
+            modal.id = 'edit-group-modal';
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit Group</h3>
@@ -689,8 +796,6 @@
             document.getElementById('modal-group-name').focus();
         }
 
-        // --- NEW ---
-        // Confirm group edit (save changes)
         function confirmEditGroup(shift, groupId) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (!group) return;
@@ -705,19 +810,16 @@
 
             group.name = newName;
             group.manager = newManager;
-
             document.getElementById('edit-group-modal').remove();
-            renderGroups(shift); // Re-render to show changes
+            renderGroups(shift);
         }
 
-
-        // --- MODIFIED ---
-        // Render groups
         function renderGroups(shift) {
             const container = document.getElementById(`shift-${shift}-groups`);
             container.innerHTML = shiftAllocations[shift].groups.map(group => {
                 const isActive = currentAssignmentGroupId === group.id && currentAssignmentShift === shift;
                 const borderClass = isActive ? 'border-green-500 border-4 shadow-lg' : 'border-[#5D5CDE] border-2';
+                
                 return `
                 <div class="bg-white rounded-lg p-4 ${borderClass}">
                     <div class="flex justify-between items-center mb-3">
@@ -732,10 +834,10 @@
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2" id="shift-${shift}-group-${group.id}-chatters">
-                        ${group.chatters.length > 0 ? group.chatters.map(chatter =>
+                        ${group.chatters.length > 0 ? group.chatters.map(chatter => 
                             `<span class="bg-[#5D5CDE] text-white px-3 py-1 rounded-md text-sm flex items-center gap-2">
                                 ${chatter}
-                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="hover:text-yellow-300 text-xs" title="Manage Models">⚙️</button>
+                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="hover:text-yellow-300 text-xs" title="Manage Models & Targets">⚙️</button>
                                 <button onclick="removeChatterFromGroup(${shift}, ${group.id}, '${chatter}')" class="hover:text-red-300">×</button>
                             </span>`
                         ).join('') : '<p class="text-gray-500 text-sm italic">No chatters assigned yet</p>'}
@@ -746,7 +848,6 @@
             renderUnassignedChatters(shift);
         }
 
-        // Assign chatter to group
         let currentAssignmentShift = null;
         let currentAssignmentGroupId = null;
 
@@ -759,7 +860,6 @@
             renderUnassignedChatters(shift);
         }
 
-        // --- MODIFIED: Added Search Bar ---
         function updateAssignmentBanner(shift) {
             const container = document.getElementById(`shift-${shift}-unassigned`);
             const existingBanner = document.getElementById('assignment-banner');
@@ -767,6 +867,7 @@
 
             const group = shiftAllocations[shift].groups.find(g => g.id === currentAssignmentGroupId);
             if (!group) return;
+
             const assignedChatters = new Set();
             shiftAllocations[shift].groups.forEach(g => {
                 g.chatters.forEach(c => assignedChatters.add(c));
@@ -791,9 +892,9 @@
                     </div>
                 </div>
                 <div>
-                    <input type="text" id="chatter-search-input-${shift}"
-                            oninput="renderUnassignedChatters(${shift})"
-                            placeholder="Type to search for a chatter..."
+                    <input type="text" id="chatter-search-input-${shift}" 
+                            oninput="renderUnassignedChatters(${shift})" 
+                            placeholder="Type to search for a chatter..." 
                             class="w-full px-4 py-2 text-base border border-gray-300 rounded-md bg-white text-gray-900">
                 </div>
             `;
@@ -845,7 +946,6 @@
             renderUnassignedChatters(shift);
         }
 
-        // Remove chatter from group
         function removeChatterFromGroup(shift, groupId, chatter) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (group) {
@@ -854,29 +954,70 @@
             }
         }
 
-        // Remove group
         function removeGroup(shift, groupId) {
             shiftAllocations[shift].groups = shiftAllocations[shift].groups.filter(g => g.id !== groupId);
             renderGroups(shift);
         }
 
-        // --- NEW ---
-        // Manage Chatter Models (Modal)
+        // ==========================================
+        //   MANAGE MODELS & TARGETS MODAL
+        // ==========================================
         function manageChatterModels(shift, groupId, chatterName) {
             const chatterModelsList = chatterModels[chatterName] || [];
             if (!modelVisibility[chatterName]) {
                 modelVisibility[chatterName] = {};
             }
+            
             const chatterPrefs = modelVisibility[chatterName];
-
-            let modelsHTML = chatterModelsList.map(modelData => {
+            
+            let modelsHTML = chatterModelsList.map((modelData, index) => {
                 const modelName = modelData.model;
                 const isVisible = chatterPrefs[modelName] === undefined ? true : chatterPrefs[modelName];
+                
+                const t = modelTargets[modelName] || DEFAULT_TARGETS;
+
                 return `
-                <label class="flex items-center gap-2 p-2 bg-gray-100 rounded-md">
-                    <input type="checkbox" class="form-checkbox h-5 w-5 text-[#5D5CDE] rounded" data-model-name="${modelName}" ${isVisible ? 'checked' : ''}>
-                    <span class="text-gray-800">${modelName}</span>
-                </label>
+                <div class="bg-gray-50 p-3 rounded-md border border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" class="form-checkbox h-5 w-5 text-[#5D5CDE] rounded model-visible-check" data-model-name="${modelName}" ${isVisible ? 'checked' : ''}>
+                            <span class="text-gray-800 font-semibold">${modelName}</span>
+                        </label>
+                        <button onclick="toggleTargetEdit('target-edit-${index}')" class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded border border-purple-300">
+                            📉 Configure Targets
+                        </button>
+                    </div>
+                    
+                    <div id="target-edit-${index}" class="hidden mt-2 pt-2 border-t border-gray-200 grid grid-cols-2 gap-2 text-xs">
+                        <div class="col-span-2 mb-1 font-bold text-gray-500">Target per 2-Hr Quarter</div>
+                        
+                        <div>
+                            <label class="block text-gray-600">Messages</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-msg-${index}" value="${t.messagesSent}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600">Fans</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-fan-${index}" value="${t.fansChatted}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600">PPVs Sent</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvs-${index}" value="${t.ppvsSent}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600">PPVs Open</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvo-${index}" value="${t.ppvsOpen}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600">Resp Time (min)</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-resp-${index}" value="${t.responseTime}">
+                        </div>
+                        <div>
+                            <label class="block text-gray-600">Revenue ($)</label>
+                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-rev-${index}" value="${t.revenue}">
+                        </div>
+                        <button onclick="saveSpecificTarget('${modelName}', ${index})" class="col-span-2 mt-2 bg-green-500 hover:bg-green-600 text-white py-1 rounded">Save Targets for ${modelName}</button>
+                    </div>
+                </div>
                 `;
             }).join('');
 
@@ -888,34 +1029,62 @@
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.id = 'model-manage-modal';
             modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Manage Models for ${chatterName}</h3>
-                    <p class="text-sm text-gray-600 mb-4">Un-check models to hide them from the final report.</p>
-                    <div class="space-y-2 max-h-60 overflow-y-auto" id="model-checkbox-list">
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4 flex flex-col max-h-[85vh]">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Manage Models: ${chatterName}</h3>
+                        <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+                    </div>
+                    <div class="space-y-3 overflow-y-auto flex-1 pr-2" id="model-checkbox-list">
                         ${modelsHTML}
                     </div>
-                    <div class="flex justify-end gap-3 mt-4">
-                        <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
-                        <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="saveModelVisibility('${chatterName}')">Save</button>
+                    <div class="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-100">
+                        <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded w-full" onclick="saveModelVisibility('${chatterName}')">Done</button>
                     </div>
                 </div>
             `;
             document.body.appendChild(modal);
         }
 
-        // --- NEW ---
-        // Save Model Visibility
+        window.toggleTargetEdit = function(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('hidden');
+        }
+
+        window.saveSpecificTarget = function(modelName, index) {
+            const targets = {
+                messagesSent: parseInt(document.getElementById(`t-msg-${index}`).value) || 0,
+                fansChatted: parseInt(document.getElementById(`t-fan-${index}`).value) || 0,
+                ppvsSent: parseInt(document.getElementById(`t-ppvs-${index}`).value) || 0,
+                ppvsOpen: parseInt(document.getElementById(`t-ppvo-${index}`).value) || 0,
+                revenue: parseInt(document.getElementById(`t-rev-${index}`).value) || 0,
+                responseTime: parseFloat(document.getElementById(`t-resp-${index}`).value) || 0
+            };
+            
+            modelTargets[modelName] = targets;
+            
+            const btn = document.querySelector(`#target-edit-${index} button`);
+            const originalText = btn.textContent;
+            btn.textContent = "Saved!";
+            btn.classList.add('bg-green-700');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('bg-green-700');
+            }, 1500);
+        }
+
         function saveModelVisibility(chatterName) {
             const prefs = {};
-            document.querySelectorAll('#model-checkbox-list input[type="checkbox"]').forEach(checkbox => {
+            document.querySelectorAll('.model-visible-check').forEach(checkbox => {
                 prefs[checkbox.dataset.modelName] = checkbox.checked;
             });
             modelVisibility[chatterName] = prefs;
             document.getElementById('model-manage-modal').remove();
+            
+            if(allocationsLocked) {
+                generateReport();
+            }
         }
 
-
-        // Switch shift tabs
         document.querySelectorAll('.shift-tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 const shift = this.dataset.shift;
@@ -930,29 +1099,28 @@
             });
         });
 
-        // --- ⬇⬇⬇ MODIFIED SECTION (SECTION SPLITTING & BORDER) ⬇⬇⬇ ---
-                // ==========================================================
-        //  UPDATED generateReport FUNCTION
-        //  (Centered Overlay + 5 chatters per section)
-        // ==========================================================
         function generateReport() {
             const resultsContainer = document.getElementById('results-container');
             const results = document.getElementById('results');
             const allocationSection = document.getElementById('allocation-section');
+            
             resultsContainer.innerHTML = '';
+            
             const quarters = ['q1', 'q2', 'q3', 'q4'];
             const quarterLabels = quarters.map((q, i) => quarterData[q] ? `Q${i + 1}` : null).filter(q => q);
 
             for (let shift = 1; shift <= 3; shift++) {
                 if (shiftAllocations[shift].groups.length === 0) continue;
+                
                 let shiftHTML = `
                     <div class="page-break-after mb-6">
                         <h2 class="text-xl font-bold text-gray-900 mb-3 pb-1 border-b-2 border-[#5D5CDE]">Shift ${shift}</h2>
                 `;
-                                shiftAllocations[shift].groups.forEach((group, groupIndex) => {
+
+                shiftAllocations[shift].groups.forEach((group, groupIndex) => {
                     const groupReportId = `group-report-${shift}-${group.id}`;
-                                        const safeFilename = `${group.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
-                    const safeManagerName = `${group.manager.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`; 
+                    const safeFilename = `${group.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+                    const safeManagerName = `${group.manager.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
                     const groupBgClass = groupIndex % 2 === 0 ? 'bg-gray-50' : 'bg-blue-50';
                     const groupMarginClass = 'mb-12';
 
@@ -967,7 +1135,6 @@
                                         Manager: ${group.manager}
                                     </span>
                                 </div>
-
                                 <div class="flex gap-2 no-print w-1/3 justify-end">
                                     <button onclick="downloadAllSections(this, '${groupReportId}', '${safeFilename}', '${safeManagerName}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1 px-2 rounded">
                                         Download All Sections
@@ -976,21 +1143,18 @@
                                         Copy All (Full, Blurry)
                                     </button>
                                 </div>
-
                             </div>
                             <div class="grid grid-cols-1 gap-2">
                     `;
-                                                            const chattersPerSection = 5; // <-- CHANGED BACK TO 5
+
+                    const chattersPerSection = 5;
                     let chatterBuffer = '';
-                                                            
-                    // --- MODIFIED ---
-                    // Added model visibility filtering
+
                     group.chatters.forEach((chatter, chatterIndex) => {
                         if (chatterModels[chatter]) {
                             const allChatterModels = chatterModels[chatter];
                             const visibility = modelVisibility[chatter] || {};
                             
-                            // Filter models based on visibility preferences
                             const visibleModels = allChatterModels.filter(modelEntry => {
                                 const isVisible = visibility[modelEntry.model];
                                 return isVisible === undefined ? true : isVisible;
@@ -1003,31 +1167,12 @@
 
                         if ((chatterIndex + 1) % chattersPerSection === 0 || chatterIndex === group.chatters.length - 1) {
                             const sectionIndex = Math.floor(chatterIndex / chattersPerSection);
-                            const sectionNumber = sectionIndex + 1; // For display
+                            const sectionNumber = sectionIndex + 1;
                             const sectionId = `${groupReportId}-section-${sectionIndex}`;
-                                                        const sectionFilename = `${safeFilename}_${safeManagerName}_section${sectionNumber}.png`;
-                                                                                    
+                            const sectionFilename = `${safeFilename}_${safeManagerName}_section${sectionNumber}.png`;
+
                             shiftHTML += `<div id="${sectionId}" class="mb-4 p-3 bg-gray-100 rounded border border-gray-300">`;
-
-                            // ===========================================
-                            //   NEW OVERLAY BANNER (CENTERED)
-                            // ===========================================
-                            shiftHTML += `
-                                <div class="screenshot-only"
-                                      style="padding: 12px;
-                                             background-color: rgba(0, 0, 0, 0.75);
-                                             border-bottom: 2px solid #5D5CDE;
-                                             margin-bottom: 12px;
-                                             border-radius: 6px;
-                                            text-align: center;">
-                                     <h2 style="font-size: 24pt; color: white; font-weight: 800; line-height: 1.1;">${group.name}</h2>
-                                    <p style="font-size: 16pt; color: #ccc; line-height: 1.1;">Manager: ${group.manager}</p>
-                                </div>
-                            `;
-                            // ===========================================
-
-                            shiftHTML += chatterBuffer; // Add chatter tables
-                                                                                    
+                            shiftHTML += chatterBuffer;
                             shiftHTML += `
                                 <div class="flex gap-2 justify-end no-print mt-2 -mr-1 -mb-1">
                                     <button onclick="downloadGroupImage(this, '${sectionId}', '${sectionFilename}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-1 px-2 rounded">
@@ -1038,65 +1183,52 @@
                                     </button>
                                 </div>
                             `;
-                                                                                    
                             shiftHTML += `</div>`;
                             chatterBuffer = '';
                         }
                     });
-                                                            
+
                     shiftHTML += `
                             </div>
                         </div>
                     `;
                 });
+
                 shiftHTML += `</div>`;
                 resultsContainer.innerHTML += shiftHTML;
             }
+
             allocationSection.classList.add('hidden');
             results.classList.remove('hidden');
         }
 
-
-        // ==========================================================
-        //  UPDATED generateGroupBlob FUNCTION (scale 4, 18pt FONT)
-        // ==========================================================
         function generateGroupBlob(elementId) {
             return new Promise((resolve, reject) => {
                 const element = document.getElementById(elementId);
                 const originalBg = element.style.backgroundColor;
-                                                const originalFontSize = element.style.fontSize;
+                const originalFontSize = element.style.fontSize;
+                
                 element.style.backgroundColor = '#ffffff';
-                                element.style.fontSize = '18pt'; // <-- CHANGED TO 18pt
+                element.style.fontSize = '18pt';
+                
                 const buttonsToHide = element.querySelectorAll('.no-print');
                 buttonsToHide.forEach(btn => btn.style.display = 'none');
 
                 html2canvas(element, {
-                    scale: 4, // <-- CHANGED TO 4
+                    scale: 4,
                     useCORS: true,
-                    window: window, 
+                    window: window,
                     onclone: (clonedDoc) => {
                         const clonedElement = clonedDoc.getElementById(elementId);
                         clonedElement.style.backgroundColor = originalBg;
-                                                                        clonedElement.style.fontSize = '18pt'; // <-- CHANGED TO 18pt
-
-                        // ===========================================
-                        //   NEW SCRIPT TO SHOW OVERLAY
-                        // ===========================================
-                        clonedDoc.querySelectorAll('.screenshot-only').forEach(overlay => {
-                            overlay.style.display = 'block';
-                        });
-                        // ===========================================
-
-                        // Hide buttons in the clone as well
+                        clonedElement.style.fontSize = '18pt';
                         clonedDoc.querySelectorAll('.no-print').forEach(btn => btn.style.display = 'none');
                     }
                 }).then(canvas => {
-                    // --- RESTORE ---
                     element.style.backgroundColor = originalBg;
                     element.style.fontSize = originalFontSize;
                     buttonsToHide.forEach(btn => btn.style.display = '');
-                    // --- END RESTORE ---
-
+                    
                     canvas.toBlob(blob => {
                         if (blob) {
                             resolve(blob);
@@ -1105,23 +1237,17 @@
                         }
                     }, 'image/png');
                 }).catch(err => {
-                    // --- RESTORE ON ERROR ---
                     element.style.backgroundColor = originalBg;
                     element.style.fontSize = originalFontSize;
                     buttonsToHide.forEach(btn => btn.style.display = '');
-                    // --- END RESTORE ---
                     reject(err);
                 });
             });
         }
 
-        // ==========================================================
-        //  NEW FUNCTION TO DOWNLOAD ALL SECTIONS
-        // ==========================================================
         async function downloadAllSections(buttonEl, groupReportId, groupName, managerName) {
             const originalText = buttonEl.innerHTML;
             buttonEl.disabled = true;
-
             try {
                 const groupElement = document.getElementById(groupReportId);
                 const sectionElements = groupElement.querySelectorAll(`[id^="${groupReportId}-section-"]`);
@@ -1135,14 +1261,11 @@
                     const section = sectionElements[i];
                     const sectionId = section.id;
                     const sectionIndex = i + 1;
-                                        buttonEl.innerHTML = `... (${sectionIndex}/${sectionElements.length})`;
-
+                    
+                    buttonEl.innerHTML = `... (${sectionIndex}/${sectionElements.length})`;
                     const filename = `${groupName}_${managerName}_section_${sectionIndex}.png`;
-
-                    // Generate the high-quality blob
+                    
                     const blob = await generateGroupBlob(sectionId);
-
-                    // Create and click the download link
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
                     link.download = filename;
@@ -1150,11 +1273,9 @@
                     link.click();
                     document.body.removeChild(link);
                     URL.revokeObjectURL(link.href);
-
-                    // Wait a moment before starting the next download
+                    
                     await new Promise(resolve => setTimeout(resolve, 300));
                 }
-
             } catch (err) {
                 console.error('Download All Sections error:', err);
                 showCustomAlert('Could not download all sections. See console for details.');
@@ -1164,12 +1285,10 @@
             }
         }
 
-        // --- DOWNLOAD FUNCTION (FOR SINGLE SECTIONS) ---
         async function downloadGroupImage(buttonEl, elementId, filename) {
             const originalText = buttonEl.innerHTML;
             buttonEl.innerHTML = '...';
             buttonEl.disabled = true;
-
             try {
                 const blob = await generateGroupBlob(elementId);
                 const link = document.createElement('a');
@@ -1179,7 +1298,6 @@
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(link.href);
-
             } catch (err) {
                 console.error('Download error:', err);
                 showCustomAlert('Could not download image. See console for details.');
@@ -1189,23 +1307,19 @@
             }
         }
 
-        // --- COPY TO CLIPBOARD FUNCTION ---
         async function copyGroupImage(buttonEl, elementId) {
             if (!navigator.clipboard || !navigator.clipboard.write) {
                 showCustomAlert('Clipboard API not supported or blocked in this browser.');
                 return;
             }
-
             const originalText = buttonEl.innerHTML;
             buttonEl.innerHTML = '...';
             buttonEl.disabled = true;
-
             try {
                 const blob = await generateGroupBlob(elementId);
                 const item = new ClipboardItem({ 'image/png': blob });
                 await navigator.clipboard.write([item]);
                 showCustomAlert('Image copied to clipboard!');
-
             } catch (err) {
                 console.error('Copy error:', err);
                 showCustomAlert('Could not copy image. See console for details.');
@@ -1214,13 +1328,12 @@
                 buttonEl.disabled = false;
             }
         }
-        // Show allocation section
+
         function showAllocationSection() {
             document.getElementById('allocation-section').classList.remove('hidden');
             document.getElementById('results').classList.add('hidden');
         }
 
-        // Custom modal function
         function showCustomAlert(message) {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
@@ -1235,7 +1348,6 @@
             document.body.appendChild(modal);
         }
 
-        // Clear all function
         function clearAll() {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
@@ -1257,42 +1369,42 @@
             document.getElementById('file-q2').value = '';
             document.getElementById('file-q3').value = '';
             document.getElementById('file-q4').value = '';
-            
             quarterData.q1 = null;
             quarterData.q2 = null;
             quarterData.q3 = null;
             quarterData.q4 = null;
-
             document.getElementById('q1-status').textContent = '';
             document.getElementById('q2-status').textContent = '';
             document.getElementById('q3-status').textContent = '';
             document.getElementById('q4-status').textContent = '';
-
+            
             shiftAllocations[1].groups = [];
             shiftAllocations[2].groups = [];
             shiftAllocations[3].groups = [];
-            
             allocationsLocked = false;
             allChatters = [];
             allModels = {};
             chatterModels = {};
+            modelVisibility = {};
+            modelTargets = {};
             
-            // --- MODIFIED ---
-            modelVisibility = {}; // Reset model visibility
-
-            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & Process Data';
+            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
-            
             document.getElementById('allocation-section').classList.add('hidden');
             document.getElementById('results').classList.add('hidden');
             document.getElementById('error-container').classList.add('hidden');
             updateAllocationStatus();
         }
 
-        // --- MODIFIED: Wait for DOM to load before adding listeners ---
         document.addEventListener('DOMContentLoaded', (event) => {
-            // Main file processing listener
             document.getElementById('process-btn').addEventListener('click', processAllFiles);
+            window.addEventListener('beforeunload', function (e) {
+                if (quarterData.q1 || quarterData.q2 || quarterData.q3 || quarterData.q4 || allChatters.length > 0) {
+                    e.preventDefault();
+                    e.returnValue = 'Are you sure you want to leave? All uploaded data will be lost.';
+                }
+            });
         });
-        // --- ⬆⬆⬆ END OF MODIFIED SECTION ⬆⬆⬆ ---
-    </script></body></html>
+    </script>
+</body>
+</html>
