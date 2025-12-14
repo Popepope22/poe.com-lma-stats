@@ -1,9 +1,11 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatter Performance Tracker (With Overlay)</title>
+    <title>Chatter Performance Tracker (Persistent)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -30,8 +32,9 @@
         <div class="mb-6 flex justify-between items-start">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900 mb-2">Chatter Performance Tracker</h1>
-                <p class="text-gray-600">Track performance against targets (Revenue, Messages, Fans, PPVs, Response Time).</p>
+                <p class="text-gray-600">Track performance with <span class="text-green-600 font-bold">Auto-Save</span>. Close the tab safely; your data will be here when you return.</p>
             </div>
+            <div id="save-indicator" class="text-xs text-gray-400 italic transition-opacity duration-500 opacity-0">Saved to memory</div>
         </div>
 
         <div id="debug-banner" class="hidden mb-4 p-2 bg-blue-50 text-blue-800 text-xs font-mono border border-blue-200 rounded"></div>
@@ -41,7 +44,7 @@
                 <h2 class="text-xl font-semibold text-gray-900">1. Upload CSV Files</h2>
                 <span id="allocation-status" class="text-sm text-gray-600"></span>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Upload 1-4 CSV files (representing 2-hour quarters).</p>
+            <p class="text-sm text-gray-600 mb-4">Upload 1-4 CSV files. If you refreshed the page, previous data is marked as "Restored".</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div>
@@ -63,8 +66,8 @@
             </div>
 
             <div class="flex gap-3">
-                <button id="process-btn" class="flex-1 bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-3 px-6 rounded-md transition duration-200">Process Files</button>
-                <button id="clear-all-btn" onclick="clearAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Clear All</button>
+                <button id="process-btn" class="flex-1 bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-3 px-6 rounded-md transition duration-200">Process Files / Refresh Data</button>
+                <button id="clear-all-btn" onclick="clearAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Clear All & Reset</button>
             </div>
         </div>
 
@@ -125,7 +128,7 @@
 
                 <div class="flex gap-3 mt-6">
                     <button onclick="lockAllocations()" id="lock-allocations-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Lock Allocations & View Report</button>
-                    <button onclick="resetAllocations()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-md transition duration-200">Reset All</button>
+                    <button onclick="resetAllocations()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-md transition duration-200">Reset Groups</button>
                 </div>
             </div>
         </div>
@@ -152,51 +155,107 @@
     <script>
         // --- DEFAULT TARGETS ---
         const DEFAULT_TARGETS = {
-            messagesSent: 0,  // 55/hr * 2
-            fansChatted: 0,    // 7.5/hr * 2
-            ppvsSent: 0,       // ~15/hr * 2 (Estimate)
-            ppvsOpen: 0,       // Daily target / 4 shifts
-            revenue: 0,       // $140/hr * 2
-            responseTime: 6     // Minutes (Lower is better)
+            messagesSent: 0,
+            fansChatted: 0,
+            ppvsSent: 0,
+            ppvsOpen: 0,
+            revenue: 0,
+            responseTime: 6
         };
 
         // Data storage
-        const quarterData = { q1: null, q2: null, q3: null, q4: null };
+        let quarterData = { q1: null, q2: null, q3: null, q4: null };
         let allChatters = [];
         let allModels = {};
-        const shiftAllocations = { 1: { groups: [] }, 2: { groups: [] }, 3: { groups: [] } };
+        let shiftAllocations = { 1: { groups: [] }, 2: { groups: [] }, 3: { groups: [] } };
         let chatterModels = {};
         let selectedChattersForAssignment = [];
         let allocationsLocked = false;
         
-        // Storage for user preferences
         let modelVisibility = {}; 
         let modelTargets = {};    
 
-        // Helper: Parse Time Strings (Safe Version)
-        // Converts "3m 20s", "1h", or "5" into Minutes (Float)
+        // --- PERSISTENCE FUNCTIONS ---
+        function saveData() {
+            try {
+                const dataToSave = {
+                    quarterData,
+                    shiftAllocations,
+                    modelVisibility,
+                    modelTargets,
+                    allocationsLocked
+                };
+                localStorage.setItem('chatterTrackerData', JSON.stringify(dataToSave));
+                
+                const indicator = document.getElementById('save-indicator');
+                indicator.style.opacity = '1';
+                setTimeout(() => { indicator.style.opacity = '0'; }, 2000);
+            } catch (e) {
+                console.warn('Failed to save to local storage (likely quota exceeded or private browsing):', e);
+            }
+        }
+
+        function loadData() {
+            const json = localStorage.getItem('chatterTrackerData');
+            if (!json) return;
+            try {
+                const saved = JSON.parse(json);
+                quarterData = saved.quarterData || { q1: null, q2: null, q3: null, q4: null };
+                
+                // Deep merge or re-assign allocations to ensure structure integrity
+                if(saved.shiftAllocations) {
+                    shiftAllocations[1] = saved.shiftAllocations[1] || { groups: [] };
+                    shiftAllocations[2] = saved.shiftAllocations[2] || { groups: [] };
+                    shiftAllocations[3] = saved.shiftAllocations[3] || { groups: [] };
+                }
+
+                modelVisibility = saved.modelVisibility || {};
+                modelTargets = saved.modelTargets || {};
+                allocationsLocked = saved.allocationsLocked || false;
+
+                // Update UI Indicators for Quarters
+                ['q1', 'q2', 'q3', 'q4'].forEach(q => {
+                    if (quarterData[q]) {
+                        const statusEl = document.getElementById(`${q}-status`);
+                        statusEl.textContent = '✓ (Restored)';
+                        statusEl.className = 'text-xs text-blue-600 font-semibold';
+                    }
+                });
+
+                // If we have data, we must rebuild the chatter lists
+                if (quarterData.q1 || quarterData.q2 || quarterData.q3 || quarterData.q4) {
+                    rebuildDataStructures();
+                    document.getElementById('allocation-section').classList.remove('hidden');
+                    
+                    if (allocationsLocked) {
+                        updateAllocationStatus();
+                        generateReport();
+                    } else {
+                        initializeAllocation();
+                    }
+                }
+
+            } catch (e) {
+                console.error("Failed to load saved data", e);
+            }
+        }
+
+        // --- TIME PARSING ---
         function parseTimeDuration(timeStr) {
             if (!timeStr) return 0;
             timeStr = timeStr.toString().toLowerCase().trim();
             if (timeStr === '-' || timeStr === '') return 0;
-            
             let minutes = 0;
             const h = timeStr.match(/(\d+)\s*h/);
             const m = timeStr.match(/(\d+)\s*m/);
             const s = timeStr.match(/(\d+)\s*s/);
-
             if (h) minutes += parseInt(h[1]) * 60;
             if (m) minutes += parseInt(m[1]);
             if (s) minutes += parseInt(s[1]) / 60;
-            
-            // Fallback for plain numbers
-            if (!h && !m && !s && !isNaN(parseFloat(timeStr))) {
-                minutes = parseFloat(timeStr);
-            }
+            if (!h && !m && !s && !isNaN(parseFloat(timeStr))) minutes = parseFloat(timeStr);
             return minutes;
         }
 
-        // Helper: Format Minutes back to "3m 20s"
         function formatTimeDuration(totalMinutes) {
             if (totalMinutes === 0 || totalMinutes === undefined || totalMinutes === null) return "-";
             const m = Math.floor(totalMinutes);
@@ -205,7 +264,7 @@
             return `${m}m ${s}s`;
         }
 
-        // Parse CSV file
+        // --- CSV PARSING ---
         function parseCSV(file) {
             return new Promise((resolve, reject) => {
                 Papa.parse(file, {
@@ -217,65 +276,37 @@
             });
         }
 
-        // Process data from CSV
         function processData(data, quarterName) {
             const processed = {};
-            
-            // Auto-Detect Columns
             let revenueKey = null;
             let responseTimeKey = null;
 
             if (data.length > 0) {
                 const keys = Object.keys(data[0]);
-                
-                // 1. Revenue Detection
                 const priorities = ['sales', 'total net earnings', 'earnings', 'gross earnings'];
                 for (const p of priorities) {
                     const found = keys.find(k => k.toLowerCase().trim() === p);
                     if (found) { revenueKey = found; break; }
                 }
-                if (!revenueKey) {
-                    revenueKey = keys.find(k => k.toLowerCase().includes('sales')) || 
-                                 keys.find(k => k.toLowerCase().includes('revenue'));
-                }
-
-                // 2. Response Time Detection
-                // Look for "response time"
+                if (!revenueKey) revenueKey = keys.find(k => k.toLowerCase().includes('sales')) || keys.find(k => k.toLowerCase().includes('revenue'));
                 responseTimeKey = keys.find(k => k.toLowerCase().includes('response time'));
-
-                // Debug Info to help verify columns
-                const debugEl = document.getElementById('debug-banner');
-                let msg = `[${quarterName}] Revenue: ${revenueKey || '❌'} | Response: ${responseTimeKey || '❌'}`;
-                if (debugEl.innerHTML === "") debugEl.classList.remove('hidden');
-                if (!debugEl.innerHTML.includes(quarterName)) {
-                    debugEl.innerHTML += (debugEl.innerHTML ? ' | ' : '') + msg;
-                }
             }
 
             data.forEach(row => {
                 const chatter = row['Employees'];
                 const model = row['Creators'];
-                
-                // Extract Metrics
                 const messagesSent = parseInt(row['Direct messages sent']) || 0;
                 const ppvsSent = parseInt(row['Direct PPVs sent']) || 0;
                 const ppvsOpen = parseInt(row['PPVs unlocked']) || 0;
                 const fansChatted = parseInt(row['Fans chatted']) || 0;
                 
-                // Extract Revenue
                 let revenue = 0;
-                if (revenueKey && row[revenueKey]) {
-                    const cleanVal = row[revenueKey].toString().replace(/[^0-9.-]+/g, "");
-                    revenue = parseFloat(cleanVal);
-                }
-                if(isNaN(revenue)) revenue = 0;
+                if (revenueKey && row[revenueKey]) revenue = parseFloat(row[revenueKey].toString().replace(/[^0-9.-]+/g, "")) || 0;
 
-                // Extract Response Time
                 let responseTime = 0;
                 let hasValidResponse = false;
                 if (responseTimeKey && row[responseTimeKey]) {
                     const val = row[responseTimeKey].toString();
-                    // Check for non-empty, non-dash values
                     if (val.trim() !== '-' && val.trim() !== '') {
                         responseTime = parseTimeDuration(val);
                         hasValidResponse = true;
@@ -287,14 +318,7 @@
                 const key = `${chatter}|||${model}`;
                 if (!processed[key]) {
                     processed[key] = {
-                        chatter,
-                        model,
-                        fansChatted,
-                        messagesSent,
-                        ppvsSent,
-                        ppvsOpen,
-                        revenue,
-                        // Store time sums and counts for averaging
+                        chatter, model, fansChatted, messagesSent, ppvsSent, ppvsOpen, revenue,
                         responseTimeSum: hasValidResponse ? responseTime : 0,
                         responseCount: hasValidResponse ? 1 : 0
                     };
@@ -304,7 +328,6 @@
                     processed[key].ppvsSent += ppvsSent;
                     processed[key].ppvsOpen += ppvsOpen;
                     processed[key].revenue += revenue;
-                    
                     if (hasValidResponse) {
                         processed[key].responseTimeSum += responseTime;
                         processed[key].responseCount += 1;
@@ -314,7 +337,6 @@
             return Object.values(processed);
         }
 
-        // Color palette
         const modelColors = [
             { bg: 'bg-blue-50', border: 'border-blue-400', text: 'text-blue-900' },
             { bg: 'bg-green-50', border: 'border-green-400', text: 'text-green-900' },
@@ -328,75 +350,50 @@
 
         function createChatterTable(chatter, modelsData, quarterLabels) {
             modelsData.sort((a, b) => a.model.localeCompare(b.model));
-            
             const maxQuarters = 4;
             const allQuarterSlots = ['Q1', 'Q2', 'Q3', 'Q4'];
             const modelsPerRow = 3;
             const modelRows = [];
-
-            for (let i = 0; i < modelsData.length; i += modelsPerRow) {
-                modelRows.push(modelsData.slice(i, i + modelsPerRow));
-            }
+            for (let i = 0; i < modelsData.length; i += modelsPerRow) modelRows.push(modelsData.slice(i, i + modelsPerRow));
 
             let html = `
                 <div class="bg-white rounded border border-gray-300 mb-2 break-inside-avoid shadow-sm">
                     <div class="bg-[#5D5CDE] text-white px-3 py-2 flex justify-center items-center relative">
                         <h4 class="text-lg font-bold text-center">${chatter}</h4>
-                        <span class="text-xs opacity-75 absolute right-3">
-                            ${modelsData.length} model${modelsData.length > 1 ? 's' : ''}
-                        </span>
-                    </div>
-            `;
+                        <span class="text-xs opacity-75 absolute right-3">${modelsData.length} model${modelsData.length > 1 ? 's' : ''}</span>
+                    </div>`;
 
             modelRows.forEach((rowModels, rowIdx) => {
-                while (rowModels.length < modelsPerRow) {
-                    rowModels.push(null);
-                }
-
-                html += `
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs table-fixed" style="border-collapse: separate; border-spacing: 0;">
-                            <thead class="bg-gray-100">
-                                <tr>
-                `;
+                while (rowModels.length < modelsPerRow) rowModels.push(null);
+                html += `<div class="overflow-x-auto"><table class="w-full text-xs table-fixed" style="border-collapse: separate; border-spacing: 0;"><thead class="bg-gray-100"><tr>`;
                 
-                // HEADER ROW
                 rowModels.forEach((modelEntry, idx) => {
                     const colorIdx = (rowIdx * modelsPerRow + idx) % modelColors.length;
                     const color = modelColors[colorIdx];
-                    
                     if (modelEntry) {
-                        html += `<th rowspan="2" class="px-1 py-1 text-left font-bold text-sm ${color.text} ${color.bg} border-b border-l border-t ${color.border}" style="width: 10%; border-width: 2px; white-space: nowrap;">${modelEntry.model}</th>`;
-                        html += `<th class="px-1 py-1 text-center font-bold text-yellow-800 italic bg-yellow-50 border-b border-t border-gray-300" style="width: 5%; border-width: 1px;">Target</th>`;
-                        allQuarterSlots.forEach(q => {
-                            html += `<th class="px-1 py-1 text-center font-semibold text-gray-700 ${color.bg} border-b border-t border-gray-300" style="width: 4.5%; border-width: 1px; white-space: nowrap;">${q}</th>`;
-                        });
+                        html += `<th rowspan="2" class="px-1 py-1 text-left font-bold text-sm ${color.text} ${color.bg} border-b border-l border-t ${color.border}" style="width: 10%; border-width: 2px; white-space: nowrap;">${modelEntry.model}</th>
+                                 <th class="px-1 py-1 text-center font-bold text-yellow-800 italic bg-yellow-50 border-b border-t border-gray-300" style="width: 5%; border-width: 1px;">Target</th>`;
+                        allQuarterSlots.forEach(q => { html += `<th class="px-1 py-1 text-center font-semibold text-gray-700 ${color.bg} border-b border-t border-gray-300" style="width: 4.5%; border-width: 1px; white-space: nowrap;">${q}</th>`; });
                         html += `<th class="px-1 py-1 text-center font-semibold text-gray-700 ${color.bg} border-b border-t border-r ${color.border}" style="width: 6.5%; border-width: 2px; white-space: nowrap;">Total</th>`;
                     } else {
                         html += `<th colspan="${maxQuarters + 3}" class="px-1 py-1 bg-gray-50 border-b border-gray-300" style="width: 33.33%; border-width: 1px;"></th>`;
                     }
                 });
 
-                html += `
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
+                html += `</tr></thead><tbody>`;
 
-                // METRICS DEFINITION - Including Response Time
                 const metricKeys = [
                     { label: 'Fans chatted', key: 'fansChatted' },
                     { label: 'Messages sent', key: 'messagesSent' },
                     { label: 'PPVs sent', key: 'ppvsSent' },
                     { label: 'PPVs open', key: 'ppvsOpen' },
                     { label: 'Revenue', key: 'revenue', isCurrency: true },
-                    { label: 'Avg Response', key: 'responseTimeSum', isTime: true } // Added Response Time
+                    { label: 'Avg Response', key: 'responseTimeSum', isTime: true }
                 ];
 
                 metricKeys.forEach((metricDef, metricIdx) => {
                     const isLastMetric = metricIdx === metricKeys.length - 1;
                     const rowBg = metricIdx % 2 === 0 ? '' : 'bg-gray-50/50';
-                    
                     html += `<tr class="${rowBg}">`;
 
                     rowModels.forEach((modelEntry, idx) => {
@@ -405,9 +402,7 @@
 
                         if (modelEntry) {
                             const bottomBorder = isLastMetric ? `border-b ${color.border}` : '';
-                            
                             const specificTargets = modelTargets[modelEntry.model] || DEFAULT_TARGETS;
-                            // Map 'responseTimeSum' to the config key 'responseTime'
                             const targetKey = metricDef.isTime ? 'responseTime' : metricDef.key;
                             const targetValue = specificTargets[targetKey];
                             
@@ -416,84 +411,74 @@
                             let targetDisplay = targetValue;
                             if (metricDef.isCurrency) targetDisplay = `$${targetValue}`;
                             if (metricDef.isTime) targetDisplay = `< ${targetValue}m`;
-
                             html += `<td class="px-1 py-1 text-center text-gray-600 font-semibold italic bg-yellow-50 ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''}">${targetDisplay}</td>`;
 
-                            let totalSum = 0;
-                            let totalCount = 0;
-                            
+                            let totalSum = 0; let totalCount = 0;
                             allQuarterSlots.forEach((quarterSlot, slotIdx) => {
                                 const quarterIdx = quarterLabels.indexOf(quarterSlot);
-                                let value = 0;
-                                let rawValue = 0;
-                                let isValidTime = false;
+                                let value = 0; let isValidTime = false;
                                 
                                 if (quarterIdx >= 0 && modelEntry.quarters[quarterIdx]) {
                                     const qData = modelEntry.quarters[quarterIdx];
-                                    
                                     if (metricDef.isTime) {
-                                        // Logic for Time: Use stored Sum and Count to get Avg
                                         if (qData.responseCount > 0) {
-                                            rawValue = qData.responseTimeSum / qData.responseCount; // Avg for this specific quarter
+                                            value = qData.responseTimeSum / qData.responseCount;
                                             isValidTime = true;
                                             totalSum += qData.responseTimeSum;
                                             totalCount += qData.responseCount;
-                                        } else {
-                                            rawValue = 0;
                                         }
                                     } else {
-                                        // Logic for Numbers: Just Sum
-                                        rawValue = qData[metricDef.key] || 0;
-                                        totalSum += rawValue;
+                                        value = qData[metricDef.key] || 0;
+                                        totalSum += value;
                                     }
-                                    value = rawValue;
                                 }
 
                                 let displayValue = value;
                                 if (metricDef.isCurrency) displayValue = `$${value.toFixed(0)}`;
-                                if (metricDef.isTime) {
-                                    displayValue = isValidTime ? formatTimeDuration(value) : '-';
-                                } else if (value === 0) {
-                                    displayValue = '-';
-                                }
+                                if (metricDef.isTime) displayValue = isValidTime ? formatTimeDuration(value) : '-';
+                                else if (value === 0) displayValue = '-';
                                 
-                                let textColor = 'text-gray-900';
-                                let fontWeight = 'font-normal';
+                                let textColor = 'text-gray-900'; let fontWeight = 'font-normal';
                                 
-                                // Coloring
-                                if (quarterIdx >= 0 && modelEntry.quarters[quarterIdx]) {
-                                     // Only color if we have valid data
-                                     const hasData = metricDef.isTime ? isValidTime : value > 0;
-                                     if (hasData) {
-                                         if (metricDef.isTime) {
-                                             // LOWER IS BETTER for time
-                                             if (value > targetValue) {
-                                                 textColor = 'text-red-600'; fontWeight = 'font-bold';
-                                             } else {
-                                                 textColor = 'text-green-600'; fontWeight = 'font-bold';
-                                             }
-                                         } else {
-                                             // HIGHER IS BETTER for others
-                                             if (value < targetValue) {
-                                                 textColor = 'text-red-600'; fontWeight = 'font-bold';
-                                             } else {
-                                                 textColor = 'text-green-600'; fontWeight = 'font-bold';
-                                             }
-                                         }
-                                     }
+                                // Color Logic (Trend)
+                                let previousValue = null;
+                                if (slotIdx > 0) {
+                                    const prevQSlot = allQuarterSlots[slotIdx - 1];
+                                    const prevQIdx = quarterLabels.indexOf(prevQSlot);
+                                    if (prevQIdx >= 0 && modelEntry.quarters[prevQIdx]) {
+                                        const prevData = modelEntry.quarters[prevQIdx];
+                                        if (metricDef.isTime) {
+                                            if (prevData.responseCount > 0) previousValue = prevData.responseTimeSum / prevData.responseCount;
+                                        } else {
+                                            previousValue = prevData[metricDef.key] || 0;
+                                        }
+                                    }
                                 }
 
-                                html += `<td class="px-1 py-1 text-center ${textColor} ${fontWeight} ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">
-                                    ${displayValue}
-                                </td>`;
+                                const hasData = metricDef.isTime ? isValidTime : value > 0;
+                                if (hasData) {
+                                    if (slotIdx === 0) { // Q1 vs Target
+                                        const bad = metricDef.isTime ? value > targetValue : value < targetValue;
+                                        textColor = bad ? 'text-red-600' : 'text-green-600';
+                                        fontWeight = 'font-bold';
+                                    } else if (previousValue !== null) { // Q2+ vs Prev
+                                        if (metricDef.isTime) {
+                                            if (value < previousValue) { textColor = 'text-green-600'; fontWeight = 'font-bold'; }
+                                            else if (value > previousValue) { textColor = 'text-red-600'; fontWeight = 'font-bold'; }
+                                            else { textColor = 'text-yellow-600'; fontWeight = 'font-bold'; }
+                                        } else {
+                                            if (value > previousValue) { textColor = 'text-green-600'; fontWeight = 'font-bold'; }
+                                            else if (value < previousValue) { textColor = 'text-red-600'; fontWeight = 'font-bold'; }
+                                            else { textColor = 'text-yellow-600'; fontWeight = 'font-bold'; }
+                                        }
+                                    }
+                                }
+
+                                html += `<td class="px-1 py-1 text-center ${textColor} ${fontWeight} ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">${displayValue}</td>`;
                             });
 
-                            // Total Column Calculation
                             let finalTotal = totalSum;
-                            if (metricDef.isTime && totalCount > 0) {
-                                finalTotal = totalSum / totalCount; // Weighted average for time
-                            }
-
+                            if (metricDef.isTime && totalCount > 0) finalTotal = totalSum / totalCount;
                             let displayTotal = finalTotal;
                             if (metricDef.isCurrency) displayTotal = `$${finalTotal.toFixed(2)}`;
                             if (metricDef.isTime) displayTotal = totalCount > 0 ? formatTimeDuration(finalTotal) : '-';
@@ -505,32 +490,66 @@
                     });
                     html += `</tr>`;
                 });
-
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                html += `</tbody></table></div>`;
             });
-
             html += `</div>`;
             return html;
         }
 
-        // Main processing function
+        // --- PROCESSING LOGIC ---
+        function rebuildDataStructures() {
+            // This function takes quarterData and rebuilds allChatters, allModels, chatterModels
+            // It allows us to reload data from memory without reparsing files
+            const quarters = ['q1', 'q2', 'q3', 'q4'];
+            const allChattersSet = new Set();
+            quarters.forEach(q => {
+                if (quarterData[q]) {
+                    quarterData[q].forEach(entry => allChattersSet.add(entry.chatter));
+                }
+            });
+
+            allChatters = Array.from(allChattersSet).sort();
+            chatterModels = {};
+            allModels = {};
+
+            allChatters.forEach(chatter => {
+                const models = new Set();
+                quarters.forEach(q => {
+                    if (quarterData[q]) {
+                        quarterData[q].forEach(entry => {
+                            if (entry.chatter === chatter) models.add(entry.model);
+                        });
+                    }
+                });
+                
+                allModels[chatter] = Array.from(models);
+                
+                chatterModels[chatter] = Array.from(models).map(model => {
+                    const quarterValues = quarters.map((q, idx) => {
+                        if (quarterData[q]) {
+                            const found = quarterData[q].find(e => e.chatter === chatter && e.model === model);
+                            return found || null;
+                        }
+                        return null;
+                    }).filter((_, idx) => quarterData[quarters[idx]] !== null);
+
+                    return { model, quarters: quarterValues };
+                });
+            });
+        }
+
         async function processAllFiles() {
             const errorContainer = document.getElementById('error-container');
             const errorMessage = document.getElementById('error-message');
             const allocationSection = document.getElementById('allocation-section');
             document.getElementById('debug-banner').innerHTML = ""; 
             document.getElementById('debug-banner').classList.add('hidden');
-            
             errorContainer.classList.add('hidden');
             
             try {
                 const quarters = ['q1', 'q2', 'q3', 'q4'];
-                const quarterLabels = [];
-                
+                let hasNewData = false;
+
                 for (let i = 0; i < quarters.length; i++) {
                     const fileInput = document.getElementById(`file-${quarters[i]}`);
                     const statusEl = document.getElementById(`${quarters[i]}-status`);
@@ -538,64 +557,21 @@
                     if (fileInput.files.length > 0) {
                         const data = await parseCSV(fileInput.files[0]);
                         quarterData[quarters[i]] = processData(data, `Q${i+1}`);
-                        quarterLabels.push(`Q${i + 1}`);
-                        statusEl.textContent = '✓';
+                        statusEl.textContent = '✓ (New)';
                         statusEl.className = 'text-xs text-green-600';
-                    } else if (quarterData[quarters[i]]) {
-                        quarterLabels.push(`Q${i + 1}`);
-                        statusEl.textContent = '✓';
-                        statusEl.className = 'text-xs text-green-600';
-                    } else {
+                        hasNewData = true;
+                    } else if (!quarterData[quarters[i]]) {
+                         // Only clear status if we don't have existing data
                         statusEl.textContent = '';
                     }
                 }
 
-                if (quarterLabels.length === 0) {
-                    throw new Error('Please upload at least one CSV file');
+                if (!hasNewData && !quarterData.q1 && !quarterData.q2 && !quarterData.q3 && !quarterData.q4) {
+                    throw new Error('Please upload at least one CSV file or check if previous data was restored.');
                 }
 
-                const allChattersSet = new Set();
-                quarters.forEach(q => {
-                    if (quarterData[q]) {
-                        quarterData[q].forEach(entry => {
-                            allChattersSet.add(entry.chatter);
-                        });
-                    }
-                });
-
-                allChatters = Array.from(allChattersSet).sort();
-                chatterModels = {};
-                allModels = {};
-
-                allChatters.forEach(chatter => {
-                    const models = new Set();
-                    quarters.forEach(q => {
-                        if (quarterData[q]) {
-                            quarterData[q].forEach(entry => {
-                                if (entry.chatter === chatter) {
-                                    models.add(entry.model);
-                                }
-                            });
-                        }
-                    });
-                    
-                    allModels[chatter] = Array.from(models);
-                    
-                    chatterModels[chatter] = Array.from(models).map(model => {
-                        const quarterValues = quarters.map((q, idx) => {
-                            if (quarterData[q]) {
-                                const found = quarterData[q].find(e => e.chatter === chatter && e.model === model);
-                                return found || null;
-                            }
-                            return null;
-                        }).filter((_, idx) => quarterData[quarters[idx]] !== null);
-
-                        return {
-                            model,
-                            quarters: quarterValues
-                        };
-                    });
-                });
+                rebuildDataStructures();
+                saveData(); // Save to local storage
 
                 updateAllocationStatus();
                 allocationSection.classList.remove('hidden');
@@ -619,9 +595,7 @@
 
         function initializeAllocation() {
             if (allocationsLocked) {
-                for (let shift = 1; shift <= 3; shift++) {
-                    renderGroups(shift);
-                }
+                for (let shift = 1; shift <= 3; shift++) renderGroups(shift);
                 document.getElementById('lock-allocations-btn').textContent = 'Allocations Locked - Processing Data';
                 document.getElementById('lock-allocations-btn').classList.add('opacity-50', 'cursor-not-allowed');
                 return;
@@ -649,6 +623,7 @@
                 return;
             }
             allocationsLocked = true;
+            saveData(); // Save lock state
             generateReport();
         }
 
@@ -657,10 +632,10 @@
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 mb-4 font-semibold">Are you sure you want to reset all allocations?</p>
+                    <p class="text-gray-700 mb-4 font-semibold">Reset all groupings and allocations?</p>
                     <div class="flex justify-end gap-3">
                         <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
-                        <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmReset(); this.closest('.fixed').remove()">Reset All</button>
+                        <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmReset(); this.closest('.fixed').remove()">Reset</button>
                     </div>
                 </div>
             `;
@@ -671,57 +646,35 @@
             shiftAllocations[1].groups = [];
             shiftAllocations[2].groups = [];
             shiftAllocations[3].groups = [];
-            modelVisibility = {}; 
-            modelTargets = {};
             allocationsLocked = false;
+            // Note: We do NOT reset targets/visibility here, only groups
             document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
             updateAllocationStatus();
+            saveData(); // Save reset
             initializeAllocation();
-            document.getElementById('debug-banner').innerHTML = "";
-            document.getElementById('debug-banner').classList.add('hidden');
         }
 
         function renderUnassignedChatters(shift) {
             const container = document.getElementById(`shift-${shift}-unassigned`);
             const assignedChatters = new Set();
-            shiftAllocations[shift].groups.forEach(group => {
-                group.chatters.forEach(c => assignedChatters.add(c));
-            });
-
+            shiftAllocations[shift].groups.forEach(group => group.chatters.forEach(c => assignedChatters.add(c)));
             const unassigned = allChatters.filter(c => !assignedChatters.has(c));
             const searchInput = document.getElementById(`chatter-search-input-${shift}`);
             const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-            
-            const filteredUnassigned = unassigned.filter(c => 
-                c.toLowerCase().includes(searchTerm)
-            );
+            const filteredUnassigned = unassigned.filter(c => c.toLowerCase().includes(searchTerm));
 
             if (filteredUnassigned.length === 0) {
-                if (searchTerm) {
-                    container.innerHTML = `<p class="text-gray-500 text-sm">No chatters found matching "${searchTerm}"</p>`;
-                } else {
-                    container.innerHTML = '<p class="text-gray-500 text-sm">All chatters have been assigned</p>';
-                }
+                container.innerHTML = searchTerm ? `<p class="text-gray-500 text-sm">No chatters found matching "${searchTerm}"</p>` : '<p class="text-gray-500 text-sm">All chatters have been assigned</p>';
                 return;
             }
 
             const isAssignmentMode = currentAssignmentShift === shift;
-            
             container.innerHTML = filteredUnassigned.map(chatter => {
                 const isSelected = selectedChattersForAssignment.includes(chatter);
-                let bgClass, hoverClass;
-                
-                if (isAssignmentMode) {
-                    bgClass = isSelected ? 'bg-[#5D5CDE]' : 'bg-green-200';
-                    hoverClass = isSelected ? 'hover:bg-[#4D4CCE]' : 'hover:bg-green-300';
-                } else {
-                    bgClass = 'bg-gray-200';
-                    hoverClass = 'hover:bg-gray-300';
-                }
-                
+                const bgClass = isAssignmentMode ? (isSelected ? 'bg-[#5D5CDE]' : 'bg-green-200') : 'bg-gray-200';
+                const hoverClass = isAssignmentMode ? (isSelected ? 'hover:bg-[#4D4CCE]' : 'hover:bg-green-300') : 'hover:bg-gray-300';
                 const textColor = isSelected ? 'text-white' : 'text-gray-800';
-                
                 return `<span class="chatter-tag ${bgClass} ${textColor} px-3 py-2 rounded-md text-sm cursor-pointer ${hoverClass}" data-chatter="${chatter}">${chatter}${isSelected ? ' ✓' : ''}</span>`;
             }).join('');
 
@@ -729,11 +682,8 @@
                 container.querySelectorAll('.chatter-tag').forEach(tag => {
                     tag.onclick = () => {
                         const chatter = tag.dataset.chatter;
-                        if (selectedChattersForAssignment.includes(chatter)) {
-                            selectedChattersForAssignment = selectedChattersForAssignment.filter(c => c !== chatter);
-                        } else {
-                            selectedChattersForAssignment.push(chatter);
-                        }
+                        if (selectedChattersForAssignment.includes(chatter)) selectedChattersForAssignment = selectedChattersForAssignment.filter(c => c !== chatter);
+                        else selectedChattersForAssignment.push(chatter);
                         renderUnassignedChatters(shift);
                         updateAssignmentBanner(shift);
                     };
@@ -752,23 +702,17 @@
                 return;
             }
 
-            const group = {
-                id: Date.now(),
-                name: groupName,
-                manager: managerName,
-                chatters: []
-            };
-
+            const group = { id: Date.now(), name: groupName, manager: managerName, chatters: [] };
             shiftAllocations[shift].groups.push(group);
             groupNameInput.value = '';
             managerNameInput.value = '';
+            saveData(); // Save
             renderGroups(shift);
         }
 
         function editGroup(shift, groupId) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (!group) return;
-
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.id = 'edit-group-modal';
@@ -776,21 +720,14 @@
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit Group</h3>
                     <div class="space-y-3">
-                        <div>
-                            <label for="modal-group-name" class="block text-sm font-medium text-gray-700">Group Name</label>
-                            <input type="text" id="modal-group-name" value="${group.name}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900">
-                        </div>
-                        <div>
-                            <label for="modal-manager-name" class="block text-sm font-medium text-gray-700">Manager Name</label>
-                            <input type="text" id="modal-manager-name" value="${group.manager}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900">
-                        </div>
+                        <div><label class="block text-sm font-medium text-gray-700">Group Name</label><input type="text" id="modal-group-name" value="${group.name}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"></div>
+                        <div><label class="block text-sm font-medium text-gray-700">Manager Name</label><input type="text" id="modal-manager-name" value="${group.manager}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"></div>
                     </div>
                     <div class="flex justify-end gap-3 mt-5">
                         <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="document.getElementById('edit-group-modal').remove()">Cancel</button>
                         <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="confirmEditGroup(${shift}, ${group.id})">Save</button>
                     </div>
-                </div>
-            `;
+                </div>`;
             document.body.appendChild(modal);
             document.getElementById('modal-group-name').focus();
         }
@@ -798,18 +735,13 @@
         function confirmEditGroup(shift, groupId) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (!group) return;
-
             const newName = document.getElementById('modal-group-name').value.trim();
             const newManager = document.getElementById('modal-manager-name').value.trim();
-
-            if (!newName || !newManager) {
-                showCustomAlert('Group name and manager name cannot be empty.');
-                return;
-            }
-
+            if (!newName || !newManager) { showCustomAlert('Fields cannot be empty.'); return; }
             group.name = newName;
             group.manager = newManager;
             document.getElementById('edit-group-modal').remove();
+            saveData(); // Save
             renderGroups(shift);
         }
 
@@ -818,31 +750,25 @@
             container.innerHTML = shiftAllocations[shift].groups.map(group => {
                 const isActive = currentAssignmentGroupId === group.id && currentAssignmentShift === shift;
                 const borderClass = isActive ? 'border-green-500 border-4 shadow-lg' : 'border-[#5D5CDE] border-2';
-                
                 return `
                 <div class="bg-white rounded-lg p-4 ${borderClass}">
                     <div class="flex justify-between items-center mb-3">
-                        <div>
-                            <h4 class="font-bold text-gray-900">${group.name} ${isActive ? '← ACTIVE' : ''}</h4>
-                            <p class="text-sm text-gray-600">Manager: ${group.manager}</p>
-                        </div>
+                        <div><h4 class="font-bold text-gray-900">${group.name} ${isActive ? '← ACTIVE' : ''}</h4><p class="text-sm text-gray-600">Manager: ${group.manager}</p></div>
                         <div class="flex gap-2">
                             <button onclick="editGroup(${shift}, ${group.id})" class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm px-3 py-1 rounded-md">Edit</button>
-                            <button onclick="assignChatterToGroup(${shift}, ${group.id})" class="bg-green-500 hover:bg-green-600 text-white text-sm px-3 py-1 rounded-md">+ Assign Chatter</button>
+                            <button onclick="assignChatterToGroup(${shift}, ${group.id})" class="bg-green-500 hover:bg-green-600 text-white text-sm px-3 py-1 rounded-md">+ Assign</button>
                             <button onclick="removeGroup(${shift}, ${group.id})" class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-md">Remove</button>
                         </div>
                     </div>
-                    <div class="flex flex-wrap gap-2" id="shift-${shift}-group-${group.id}-chatters">
+                    <div class="flex flex-wrap gap-2">
                         ${group.chatters.length > 0 ? group.chatters.map(chatter => 
-                            `<span class="bg-[#5D5CDE] text-white px-3 py-1 rounded-md text-sm flex items-center gap-2">
-                                ${chatter}
-                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="hover:text-yellow-300 text-xs" title="Manage Models & Targets">⚙️</button>
+                            `<span class="bg-[#5D5CDE] text-white px-3 py-1 rounded-md text-sm flex items-center gap-2">${chatter}
+                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="hover:text-yellow-300 text-xs" title="Manage Models">⚙️</button>
                                 <button onclick="removeChatterFromGroup(${shift}, ${group.id}, '${chatter}')" class="hover:text-red-300">×</button>
                             </span>`
                         ).join('') : '<p class="text-gray-500 text-sm italic">No chatters assigned yet</p>'}
                     </div>
-                </div>
-            `;
+                </div>`;
             }).join('');
             renderUnassignedChatters(shift);
         }
@@ -863,14 +789,10 @@
             const container = document.getElementById(`shift-${shift}-unassigned`);
             const existingBanner = document.getElementById('assignment-banner');
             if (existingBanner) existingBanner.remove();
-
             const group = shiftAllocations[shift].groups.find(g => g.id === currentAssignmentGroupId);
             if (!group) return;
-
             const assignedChatters = new Set();
-            shiftAllocations[shift].groups.forEach(g => {
-                g.chatters.forEach(c => assignedChatters.add(c));
-            });
+            shiftAllocations[shift].groups.forEach(g => g.chatters.forEach(c => assignedChatters.add(c)));
             const unassigned = allChatters.filter(c => !assignedChatters.has(c));
             const selectedCount = selectedChattersForAssignment.length;
 
@@ -879,35 +801,23 @@
             banner.className = 'bg-green-100 border-2 border-green-500 rounded-lg p-3 mb-3 space-y-3';
             banner.innerHTML = `
                 <div class="flex justify-between items-center gap-4">
-                    <div>
-                        <p class="text-green-800 font-semibold">Assigning to "${group.name}"</p>
-                        <p class="text-green-700 text-sm mt-1">Click chatters below to select (${selectedCount} selected)</p>
-                    </div>
+                    <div><p class="text-green-800 font-semibold">Assigning to "${group.name}"</p><p class="text-green-700 text-sm mt-1">Click chatters to select (${selectedCount} selected)</p></div>
                     <div class="flex gap-2">
-                        ${unassigned.length > 0 ? `<button onclick="selectAllUnassigned(${shift})" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-md">Select All (${unassigned.length})</button>` : ''}
+                        ${unassigned.length > 0 ? `<button onclick="selectAllUnassigned(${shift})" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-md">Select All</button>` : ''}
                         ${selectedCount > 0 ? `<button onclick="deselectAll(${shift})" class="bg-orange-500 hover:bg-orange-600 text-white text-sm px-3 py-2 rounded-md">Clear</button>` : ''}
-                        ${selectedCount > 0 ? `<button onclick="confirmAssignment(${shift})" class="bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold px-4 py-2 rounded-md">Assign ${selectedCount} Chatter${selectedCount > 1 ? 's' : ''}</button>` : ''}
+                        ${selectedCount > 0 ? `<button onclick="confirmAssignment(${shift})" class="bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold px-4 py-2 rounded-md">Assign</button>` : ''}
                         <button onclick="cancelAssignment(${shift})" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-md">Cancel</button>
                     </div>
                 </div>
-                <div>
-                    <input type="text" id="chatter-search-input-${shift}" 
-                            oninput="renderUnassignedChatters(${shift})" 
-                            placeholder="Type to search for a chatter..." 
-                            class="w-full px-4 py-2 text-base border border-gray-300 rounded-md bg-white text-gray-900">
-                </div>
-            `;
+                <div><input type="text" id="chatter-search-input-${shift}" oninput="renderUnassignedChatters(${shift})" placeholder="Type to search..." class="w-full px-4 py-2 text-base border border-gray-300 rounded-md bg-white text-gray-900"></div>`;
             container.parentElement.insertBefore(banner, container);
             document.getElementById(`chatter-search-input-${shift}`).focus();
         }
 
         function selectAllUnassigned(shift) {
             const assignedChatters = new Set();
-            shiftAllocations[shift].groups.forEach(g => {
-                g.chatters.forEach(c => assignedChatters.add(c));
-            });
-            const unassigned = allChatters.filter(c => !assignedChatters.has(c));
-            selectedChattersForAssignment = [...unassigned];
+            shiftAllocations[shift].groups.forEach(g => g.chatters.forEach(c => assignedChatters.add(c)));
+            selectedChattersForAssignment = allChatters.filter(c => !assignedChatters.has(c));
             renderUnassignedChatters(shift);
             updateAssignmentBanner(shift);
         }
@@ -922,16 +832,14 @@
             const group = shiftAllocations[shift].groups.find(g => g.id === currentAssignmentGroupId);
             if (group && selectedChattersForAssignment.length > 0) {
                 selectedChattersForAssignment.forEach(chatter => {
-                    if (!group.chatters.includes(chatter)) {
-                        group.chatters.push(chatter);
-                    }
+                    if (!group.chatters.includes(chatter)) group.chatters.push(chatter);
                 });
             }
             selectedChattersForAssignment = [];
             currentAssignmentShift = null;
             currentAssignmentGroupId = null;
-            const banner = document.getElementById('assignment-banner');
-            if (banner) banner.remove();
+            if(document.getElementById('assignment-banner')) document.getElementById('assignment-banner').remove();
+            saveData(); // Save
             renderGroups(shift);
         }
 
@@ -939,8 +847,7 @@
             selectedChattersForAssignment = [];
             currentAssignmentShift = null;
             currentAssignmentGroupId = null;
-            const banner = document.getElementById('assignment-banner');
-            if (banner) banner.remove();
+            if(document.getElementById('assignment-banner')) document.getElementById('assignment-banner').remove();
             renderGroups(shift);
             renderUnassignedChatters(shift);
         }
@@ -949,30 +856,25 @@
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (group) {
                 group.chatters = group.chatters.filter(c => c !== chatter);
+                saveData(); // Save
                 renderGroups(shift);
             }
         }
 
         function removeGroup(shift, groupId) {
             shiftAllocations[shift].groups = shiftAllocations[shift].groups.filter(g => g.id !== groupId);
+            saveData(); // Save
             renderGroups(shift);
         }
 
-        // ==========================================
-        //    MANAGE MODELS & TARGETS MODAL
-        // ==========================================
         function manageChatterModels(shift, groupId, chatterName) {
             const chatterModelsList = chatterModels[chatterName] || [];
-            if (!modelVisibility[chatterName]) {
-                modelVisibility[chatterName] = {};
-            }
-            
+            if (!modelVisibility[chatterName]) modelVisibility[chatterName] = {};
             const chatterPrefs = modelVisibility[chatterName];
             
             let modelsHTML = chatterModelsList.map((modelData, index) => {
                 const modelName = modelData.model;
                 const isVisible = chatterPrefs[modelName] === undefined ? true : chatterPrefs[modelName];
-                
                 const t = modelTargets[modelName] || DEFAULT_TARGETS;
 
                 return `
@@ -982,75 +884,39 @@
                             <input type="checkbox" class="form-checkbox h-5 w-5 text-[#5D5CDE] rounded model-visible-check" data-model-name="${modelName}" ${isVisible ? 'checked' : ''}>
                             <span class="text-gray-800 font-semibold">${modelName}</span>
                         </label>
-                        <button onclick="toggleTargetEdit('target-edit-${index}')" class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded border border-purple-300">
-                            📉 Configure Targets
-                        </button>
+                        <button onclick="toggleTargetEdit('target-edit-${index}')" class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded border border-purple-300">📉 Targets</button>
                     </div>
-                    
                     <div id="target-edit-${index}" class="hidden mt-2 pt-2 border-t border-gray-200 grid grid-cols-2 gap-2 text-xs">
                         <div class="col-span-2 mb-1 font-bold text-gray-500">Target per 2-Hr Quarter</div>
-                        
-                        <div>
-                            <label class="block text-gray-600">Messages</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-msg-${index}" value="${t.messagesSent}">
-                        </div>
-                        <div>
-                            <label class="block text-gray-600">Fans</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-fan-${index}" value="${t.fansChatted}">
-                        </div>
-                        <div>
-                            <label class="block text-gray-600">PPVs Sent</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvs-${index}" value="${t.ppvsSent}">
-                        </div>
-                        <div>
-                            <label class="block text-gray-600">PPVs Open</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvo-${index}" value="${t.ppvsOpen}">
-                        </div>
-                        <div>
-                            <label class="block text-gray-600">Resp Time (min)</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-resp-${index}" value="${t.responseTime}">
-                        </div>
-                        <div>
-                            <label class="block text-gray-600">Revenue ($)</label>
-                            <input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-rev-${index}" value="${t.revenue}">
-                        </div>
-                        <button onclick="saveSpecificTarget('${modelName}', ${index})" class="col-span-2 mt-2 bg-green-500 hover:bg-green-600 text-white py-1 rounded">Save Targets for ${modelName}</button>
+                        <div><label class="block text-gray-600">Messages</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-msg-${index}" value="${t.messagesSent}"></div>
+                        <div><label class="block text-gray-600">Fans</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-fan-${index}" value="${t.fansChatted}"></div>
+                        <div><label class="block text-gray-600">PPVs Sent</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvs-${index}" value="${t.ppvsSent}"></div>
+                        <div><label class="block text-gray-600">PPVs Open</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvo-${index}" value="${t.ppvsOpen}"></div>
+                        <div><label class="block text-gray-600">Resp Time</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-resp-${index}" value="${t.responseTime}"></div>
+                        <div><label class="block text-gray-600">Revenue</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-rev-${index}" value="${t.revenue}"></div>
+                        <button onclick="saveSpecificTarget('${modelName}', ${index})" class="col-span-2 mt-2 bg-green-500 hover:bg-green-600 text-white py-1 rounded">Save Targets</button>
                     </div>
-                </div>
-                `;
+                </div>`;
             }).join('');
 
-            if (chatterModelsList.length === 0) {
-                modelsHTML = '<p class="text-sm text-gray-500">No models found for this chatter.</p>';
-            }
+            if (chatterModelsList.length === 0) modelsHTML = '<p class="text-sm text-gray-500">No models found for this chatter.</p>';
 
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.id = 'model-manage-modal';
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4 flex flex-col max-h-[85vh]">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold text-gray-900">Manage Models: ${chatterName}</h3>
-                        <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
-                    </div>
-                    <div class="space-y-3 overflow-y-auto flex-1 pr-2" id="model-checkbox-list">
-                        ${modelsHTML}
-                    </div>
-                    <div class="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-100">
-                        <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded w-full" onclick="saveModelVisibility('${chatterName}')">Done</button>
-                    </div>
-                </div>
-            `;
+                    <div class="flex justify-between items-center mb-4"><h3 class="text-lg font-semibold text-gray-900">Manage Models: ${chatterName}</h3><button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button></div>
+                    <div class="space-y-3 overflow-y-auto flex-1 pr-2" id="model-checkbox-list">${modelsHTML}</div>
+                    <div class="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-100"><button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded w-full" onclick="saveModelVisibility('${chatterName}')">Done</button></div>
+                </div>`;
             document.body.appendChild(modal);
         }
 
-        window.toggleTargetEdit = function(id) {
-            const el = document.getElementById(id);
-            el.classList.toggle('hidden');
-        }
+        window.toggleTargetEdit = function(id) { document.getElementById(id).classList.toggle('hidden'); }
 
         window.saveSpecificTarget = function(modelName, index) {
-            const targets = {
+            modelTargets[modelName] = {
                 messagesSent: parseInt(document.getElementById(`t-msg-${index}`).value) || 0,
                 fansChatted: parseInt(document.getElementById(`t-fan-${index}`).value) || 0,
                 ppvsSent: parseInt(document.getElementById(`t-ppvs-${index}`).value) || 0,
@@ -1058,41 +924,27 @@
                 revenue: parseInt(document.getElementById(`t-rev-${index}`).value) || 0,
                 responseTime: parseFloat(document.getElementById(`t-resp-${index}`).value) || 0
             };
-            
-            modelTargets[modelName] = targets;
-            
             const btn = document.querySelector(`#target-edit-${index} button`);
             const originalText = btn.textContent;
             btn.textContent = "Saved!";
             btn.classList.add('bg-green-700');
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.classList.remove('bg-green-700');
-            }, 1500);
+            setTimeout(() => { btn.textContent = originalText; btn.classList.remove('bg-green-700'); }, 1500);
         }
 
         function saveModelVisibility(chatterName) {
             const prefs = {};
-            document.querySelectorAll('.model-visible-check').forEach(checkbox => {
-                prefs[checkbox.dataset.modelName] = checkbox.checked;
-            });
+            document.querySelectorAll('.model-visible-check').forEach(checkbox => prefs[checkbox.dataset.modelName] = checkbox.checked);
             modelVisibility[chatterName] = prefs;
             document.getElementById('model-manage-modal').remove();
-            
-            if(allocationsLocked) {
-                generateReport();
-            }
+            saveData(); // Save
+            if(allocationsLocked) generateReport();
         }
 
         document.querySelectorAll('.shift-tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 const shift = this.dataset.shift;
-                document.querySelectorAll('.shift-tab').forEach(t => {
-                    t.classList.remove('bg-[#5D5CDE]', 'text-white');
-                    t.classList.add('text-gray-600');
-                });
-                this.classList.add('bg-[#5D5CDE]', 'text-white');
-                this.classList.remove('text-gray-600');
+                document.querySelectorAll('.shift-tab').forEach(t => { t.classList.remove('bg-[#5D5CDE]', 'text-white'); t.classList.add('text-gray-600'); });
+                this.classList.add('bg-[#5D5CDE]', 'text-white'); this.classList.remove('text-gray-600');
                 document.querySelectorAll('.shift-content').forEach(c => c.classList.add('hidden'));
                 document.getElementById(`shift-${shift}-content`).classList.remove('hidden');
             });
@@ -1102,161 +954,89 @@
             const resultsContainer = document.getElementById('results-container');
             const results = document.getElementById('results');
             const allocationSection = document.getElementById('allocation-section');
-            
             resultsContainer.innerHTML = '';
-            
             const quarters = ['q1', 'q2', 'q3', 'q4'];
             const quarterLabels = quarters.map((q, i) => quarterData[q] ? `Q${i + 1}` : null).filter(q => q);
 
             for (let shift = 1; shift <= 3; shift++) {
                 if (shiftAllocations[shift].groups.length === 0) continue;
-                
-                let shiftHTML = `
-                    <div class="page-break-after mb-6">
-                        <h2 class="text-xl font-bold text-gray-900 mb-3 pb-1 border-b-2 border-[#5D5CDE]">Shift ${shift}</h2>
-                `;
+                let shiftHTML = `<div class="page-break-after mb-6"><h2 class="text-xl font-bold text-gray-900 mb-3 pb-1 border-b-2 border-[#5D5CDE]">Shift ${shift}</h2>`;
 
                 shiftAllocations[shift].groups.forEach((group, groupIndex) => {
                     const groupReportId = `group-report-${shift}-${group.id}`;
                     const safeFilename = `${group.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
                     const safeManagerName = `${group.manager.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
                     const groupBgClass = groupIndex % 2 === 0 ? 'bg-gray-50' : 'bg-blue-50';
-                    const groupMarginClass = 'mb-12';
-
                     shiftHTML += `
-                        <div id="${groupReportId}" class="${groupMarginClass} p-3 ${groupBgClass} rounded border-8 border-black">
+                        <div id="${groupReportId}" class="mb-12 p-3 ${groupBgClass} rounded border-8 border-black">
                             <div class="mb-2 pb-1 border-b border-gray-300 flex justify-between items-center">
-                                <h3 class="text-lg font-bold text-[#5D5CDE] w-1/3">
-                                    ${group.name}
-                                </h3>
-                                <div class="w-1/3 text-center">
-                                    <span class="text-xl font-semibold text-gray-700">
-                                        Manager: ${group.manager}
-                                    </span>
-                                </div>
+                                <h3 class="text-lg font-bold text-[#5D5CDE] w-1/3">${group.name}</h3>
+                                <div class="w-1/3 text-center"><span class="text-xl font-semibold text-gray-700">Manager: ${group.manager}</span></div>
                                 <div class="flex gap-2 no-print w-1/3 justify-end">
-                                    <button onclick="downloadAllSections(this, '${groupReportId}', '${safeFilename}', '${safeManagerName}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1 px-2 rounded">
-                                        Download All Sections
-                                    </button>
-                                    <button onclick="copyGroupImage(this, '${groupReportId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">
-                                        Copy All (Full, Blurry)
-                                    </button>
+                                    <button onclick="downloadAllSections(this, '${groupReportId}', '${safeFilename}', '${safeManagerName}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1 px-2 rounded">Download All Sections</button>
+                                    <button onclick="copyGroupImage(this, '${groupReportId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">Copy All (Full)</button>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 gap-2">
-                    `;
+                            <div class="grid grid-cols-1 gap-2">`;
 
                     const chattersPerSection = 5;
                     let chatterBuffer = '';
-
                     group.chatters.forEach((chatter, chatterIndex) => {
                         if (chatterModels[chatter]) {
                             const allChatterModels = chatterModels[chatter];
                             const visibility = modelVisibility[chatter] || {};
-                            
-                            const visibleModels = allChatterModels.filter(modelEntry => {
-                                const isVisible = visibility[modelEntry.model];
-                                return isVisible === undefined ? true : isVisible;
-                            });
-
-                            if (visibleModels.length > 0) {
-                                chatterBuffer += createChatterTable(chatter, visibleModels, quarterLabels);
-                            }
+                            const visibleModels = allChatterModels.filter(m => visibility[m.model] === undefined ? true : visibility[m.model]);
+                            if (visibleModels.length > 0) chatterBuffer += createChatterTable(chatter, visibleModels, quarterLabels);
                         }
-
                         if ((chatterIndex + 1) % chattersPerSection === 0 || chatterIndex === group.chatters.length - 1) {
                             const sectionIndex = Math.floor(chatterIndex / chattersPerSection);
-                            const sectionNumber = sectionIndex + 1;
                             const sectionId = `${groupReportId}-section-${sectionIndex}`;
-                            const sectionFilename = `${safeFilename}_${safeManagerName}_section${sectionNumber}.png`;
-
-                            shiftHTML += `<div id="${sectionId}" class="mb-4 p-3 bg-gray-100 rounded border border-gray-300 relative">`;
-                            
-                            // --- SECRET OVERLAY (Normally Hidden) ---
-                            shiftHTML += `
+                            shiftHTML += `<div id="${sectionId}" class="mb-4 p-3 bg-gray-100 rounded border border-gray-300 relative">
                                 <div class="export-header hidden mb-4 p-4 bg-[#5D5CDE] text-white text-center rounded-t shadow-md border-b-4 border-[#220e30]">
                                     <h1 class="text-3xl font-bold uppercase tracking-wider">${group.name}</h1>
                                     <h2 class="text-xl font-semibold mt-1 opacity-90">Manager: ${group.manager}</h2>
                                 </div>
-                            `;
-                            // ----------------------------------------
-
-                            shiftHTML += chatterBuffer;
-                            shiftHTML += `
+                                ${chatterBuffer}
                                 <div class="flex gap-2 justify-end no-print mt-2 -mr-1 -mb-1">
-                                    <button onclick="downloadGroupImage(this, '${sectionId}', '${sectionFilename}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-1 px-2 rounded">
-                                        Download Section ${sectionNumber}
-                                    </button>
-                                    <button onclick="copyGroupImage(this, '${sectionId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">
-                                        Copy Section ${sectionNumber}
-                                    </button>
-                                </div>
-                            `;
-                            shiftHTML += `</div>`;
+                                    <button onclick="downloadGroupImage(this, '${sectionId}', '${safeFilename}_sect${sectionIndex+1}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-1 px-2 rounded">Download</button>
+                                    <button onclick="copyGroupImage(this, '${sectionId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">Copy</button>
+                                </div></div>`;
                             chatterBuffer = '';
                         }
                     });
-
-                    shiftHTML += `
-                            </div>
-                        </div>
-                    `;
+                    shiftHTML += `</div></div>`;
                 });
-
                 shiftHTML += `</div>`;
                 resultsContainer.innerHTML += shiftHTML;
             }
-
             allocationSection.classList.add('hidden');
             results.classList.remove('hidden');
         }
 
+        // --- EXPORT FUNCTIONS ---
         function generateGroupBlob(elementId) {
             return new Promise((resolve, reject) => {
                 const element = document.getElementById(elementId);
                 const originalBg = element.style.backgroundColor;
                 const originalFontSize = element.style.fontSize;
-                
-                element.style.backgroundColor = '#ffffff';
-                element.style.fontSize = '18pt';
-                
-                const buttonsToHide = element.querySelectorAll('.no-print');
-                buttonsToHide.forEach(btn => btn.style.display = 'none');
-
+                element.style.backgroundColor = '#ffffff'; element.style.fontSize = '18pt';
+                element.querySelectorAll('.no-print').forEach(btn => btn.style.display = 'none');
                 html2canvas(element, {
-                    scale: 4,
-                    useCORS: true,
-                    window: window,
+                    scale: 4, useCORS: true, window: window,
                     onclone: (clonedDoc) => {
                         const clonedElement = clonedDoc.getElementById(elementId);
-                        clonedElement.style.backgroundColor = originalBg;
-                        clonedElement.style.fontSize = '18pt';
+                        clonedElement.style.backgroundColor = originalBg; clonedElement.style.fontSize = '18pt';
                         clonedDoc.querySelectorAll('.no-print').forEach(btn => btn.style.display = 'none');
-
-                        // --- SHOW THE SECRET OVERLAY IN THE CLONE ---
                         const header = clonedElement.querySelector('.export-header');
-                        if (header) {
-                            header.classList.remove('hidden');
-                            header.style.display = 'block'; 
-                        }
-                        // --------------------------------------------
+                        if (header) { header.classList.remove('hidden'); header.style.display = 'block'; }
                     }
                 }).then(canvas => {
-                    element.style.backgroundColor = originalBg;
-                    element.style.fontSize = originalFontSize;
-                    buttonsToHide.forEach(btn => btn.style.display = '');
-                    
-                    canvas.toBlob(blob => {
-                        if (blob) {
-                            resolve(blob);
-                        } else {
-                            reject(new Error('Canvas to Blob conversion failed'));
-                        }
-                    }, 'image/png');
+                    element.style.backgroundColor = originalBg; element.style.fontSize = originalFontSize;
+                    element.querySelectorAll('.no-print').forEach(btn => btn.style.display = '');
+                    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas failed')), 'image/png');
                 }).catch(err => {
-                    element.style.backgroundColor = originalBg;
-                    element.style.fontSize = originalFontSize;
-                    buttonsToHide.forEach(btn => btn.style.display = '');
+                    element.style.backgroundColor = originalBg; element.style.fontSize = originalFontSize;
+                    element.querySelectorAll('.no-print').forEach(btn => btn.style.display = '');
                     reject(err);
                 });
             });
@@ -1268,82 +1048,41 @@
             try {
                 const groupElement = document.getElementById(groupReportId);
                 const sectionElements = groupElement.querySelectorAll(`[id^="${groupReportId}-section-"]`);
-                
-                if (sectionElements.length === 0) {
-                    showCustomAlert('No sections found to download.');
-                    return;
-                }
-
+                if (sectionElements.length === 0) { showCustomAlert('No sections found.'); return; }
                 for (let i = 0; i < sectionElements.length; i++) {
-                    const section = sectionElements[i];
-                    const sectionId = section.id;
-                    const sectionIndex = i + 1;
-                    
-                    buttonEl.innerHTML = `... (${sectionIndex}/${sectionElements.length})`;
-                    const filename = `${groupName}_${managerName}_section_${sectionIndex}.png`;
-                    
-                    const blob = await generateGroupBlob(sectionId);
+                    buttonEl.innerHTML = `... (${i+1}/${sectionElements.length})`;
+                    const blob = await generateGroupBlob(sectionElements[i].id);
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
-                    link.download = filename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(link.href);
-                    
+                    link.download = `${groupName}_${managerName}_section_${i+1}.png`;
+                    document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
                     await new Promise(resolve => setTimeout(resolve, 300));
                 }
-            } catch (err) {
-                console.error('Download All Sections error:', err);
-                showCustomAlert('Could not download all sections. See console for details.');
-            } finally {
-                buttonEl.innerHTML = originalText;
-                buttonEl.disabled = false;
-            }
+            } catch (err) { console.error(err); showCustomAlert('Download error.'); } 
+            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
         }
 
         async function downloadGroupImage(buttonEl, elementId, filename) {
-            const originalText = buttonEl.innerHTML;
-            buttonEl.innerHTML = '...';
-            buttonEl.disabled = true;
+            const originalText = buttonEl.innerHTML; buttonEl.innerHTML = '...'; buttonEl.disabled = true;
             try {
                 const blob = await generateGroupBlob(elementId);
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
-            } catch (err) {
-                console.error('Download error:', err);
-                showCustomAlert('Could not download image. See console for details.');
-            } finally {
-                buttonEl.innerHTML = originalText;
-                buttonEl.disabled = false;
-            }
+                link.download = filename + ".png";
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
+            } catch (err) { console.error(err); showCustomAlert('Download error.'); }
+            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
         }
 
         async function copyGroupImage(buttonEl, elementId) {
-            if (!navigator.clipboard || !navigator.clipboard.write) {
-                showCustomAlert('Clipboard API not supported or blocked in this browser.');
-                return;
-            }
-            const originalText = buttonEl.innerHTML;
-            buttonEl.innerHTML = '...';
-            buttonEl.disabled = true;
+            if (!navigator.clipboard || !navigator.clipboard.write) { showCustomAlert('Clipboard not supported.'); return; }
+            const originalText = buttonEl.innerHTML; buttonEl.innerHTML = '...'; buttonEl.disabled = true;
             try {
                 const blob = await generateGroupBlob(elementId);
-                const item = new ClipboardItem({ 'image/png': blob });
-                await navigator.clipboard.write([item]);
-                showCustomAlert('Image copied to clipboard!');
-            } catch (err) {
-                console.error('Copy error:', err);
-                showCustomAlert('Could not copy image. See console for details.');
-            } finally {
-                buttonEl.innerHTML = originalText;
-                buttonEl.disabled = false;
-            }
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                showCustomAlert('Copied to clipboard!');
+            } catch (err) { console.error(err); showCustomAlert('Copy error.'); }
+            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
         }
 
         function showAllocationSection() {
@@ -1357,11 +1096,8 @@
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
                     <p class="text-gray-700 mb-4">${message}</p>
-                    <div class="flex justify-end">
-                        <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="this.closest('.fixed').remove()">OK</button>
-                    </div>
-                </div>
-            `;
+                    <div class="flex justify-end"><button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="this.closest('.fixed').remove()">OK</button></div>
+                </div>`;
             document.body.appendChild(modal);
         }
 
@@ -1370,40 +1106,28 @@
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.innerHTML = `
                 <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 mb-4 font-semibold">Are you sure you want to clear everything?</p>
-                    <p class="text-gray-600 text-sm mb-4">This will remove all uploaded files, reset all allocations, and clear model visibility settings.</p>
+                    <p class="text-gray-700 mb-4 font-semibold">Clear everything?</p>
+                    <p class="text-gray-600 text-sm mb-4">This will wipe all data from memory.</p>
                     <div class="flex justify-end gap-3">
                         <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
                         <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmClearAll(); this.closest('.fixed').remove()">Clear All</button>
                     </div>
-                </div>
-            `;
+                </div>`;
             document.body.appendChild(modal);
         }
 
         function confirmClearAll() {
-            document.getElementById('file-q1').value = '';
-            document.getElementById('file-q2').value = '';
-            document.getElementById('file-q3').value = '';
-            document.getElementById('file-q4').value = '';
-            quarterData.q1 = null;
-            quarterData.q2 = null;
-            quarterData.q3 = null;
-            quarterData.q4 = null;
-            document.getElementById('q1-status').textContent = '';
-            document.getElementById('q2-status').textContent = '';
-            document.getElementById('q3-status').textContent = '';
-            document.getElementById('q4-status').textContent = '';
+            document.getElementById('file-q1').value = ''; document.getElementById('file-q2').value = '';
+            document.getElementById('file-q3').value = ''; document.getElementById('file-q4').value = '';
+            quarterData = { q1: null, q2: null, q3: null, q4: null };
+            document.getElementById('q1-status').textContent = ''; document.getElementById('q2-status').textContent = '';
+            document.getElementById('q3-status').textContent = ''; document.getElementById('q4-status').textContent = '';
             
-            shiftAllocations[1].groups = [];
-            shiftAllocations[2].groups = [];
-            shiftAllocations[3].groups = [];
+            shiftAllocations[1].groups = []; shiftAllocations[2].groups = []; shiftAllocations[3].groups = [];
             allocationsLocked = false;
-            allChatters = [];
-            allModels = {};
-            chatterModels = {};
-            modelVisibility = {};
-            modelTargets = {};
+            allChatters = []; allModels = {}; chatterModels = {}; modelVisibility = {}; modelTargets = {};
+            
+            localStorage.removeItem('chatterTrackerData'); // Clear storage
             
             document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
@@ -1414,15 +1138,15 @@
         }
 
         document.addEventListener('DOMContentLoaded', (event) => {
+            loadData(); // Load saved data on startup
             document.getElementById('process-btn').addEventListener('click', processAllFiles);
             window.addEventListener('beforeunload', function (e) {
-                if (quarterData.q1 || quarterData.q2 || quarterData.q3 || quarterData.q4 || allChatters.length > 0) {
-                    e.preventDefault();
-                    e.returnValue = 'Are you sure you want to leave? All uploaded data will be lost.';
+                // Warning not needed as much now due to auto-save, but good as a backup
+                if ((quarterData.q1 || allChatters.length > 0) && !localStorage.getItem('chatterTrackerData')) {
+                    e.preventDefault(); e.returnValue = '';
                 }
             });
         });
     </script>
 </body>
 </html>
-
