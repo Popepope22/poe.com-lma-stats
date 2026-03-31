@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,26 +39,35 @@
 
         <div class="bg-gray-50 rounded-lg p-6 mb-6 no-print">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold text-gray-900">1. Upload CSV Files</h2>
-                <span id="allocation-status" class="text-sm text-gray-600"></span>
+                <h2 class="text-xl font-semibold text-gray-900">1. Data & CSV Management</h2>
+                <div class="flex gap-2">
+                    <button onclick="exportPersistentData()" class="bg-gray-800 hover:bg-black text-white text-xs font-bold py-2 px-3 rounded flex items-center gap-1 transition">
+                        📥 Export Backup
+                    </button>
+                    <label class="bg-gray-800 hover:bg-black text-white text-xs font-bold py-2 px-3 rounded flex items-center gap-1 cursor-pointer transition">
+                        📤 Import Backup
+                        <input type="file" id="import-backup-input" accept=".json" class="hidden" onchange="importPersistentData(event)">
+                    </label>
+                </div>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Upload 1-4 CSV files. If you refreshed the page, previous data is marked as "Restored".</p>
+            
+            <p class="text-sm text-gray-600 mb-4">Upload CSV files for each quarter. Restored data is marked in blue.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 1 <span id="q1-status" class="text-xs"></span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Quarter 1 <span id="q1-status" class="text-xs"></span></label>
                     <input type="file" accept=".csv" id="file-q1" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 2 <span id="q2-status" class="text-xs"></span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Quarter 2 <span id="q2-status" class="text-xs"></span></label>
                     <input type="file" accept=".csv" id="file-q2" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 3 <span id="q3-status" class="text-xs"></span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Quarter 3 <span id="q3-status" class="text-xs"></span></label>
                     <input type="file" accept=".csv" id="file-q3" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">Quarter 4 <span id="q4-status" class="text-xs"></span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Quarter 4 <span id="q4-status" class="text-xs"></span></label>
                     <input type="file" accept=".csv" id="file-q4" class="block w-full text-base px-3 py-2 border border-gray-300 rounded-md bg-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#5D5CDE] file:text-white hover:file:bg-[#4D4CCE]">
                 </div>
             </div>
@@ -171,9 +178,54 @@
         let chatterModels = {};
         let selectedChattersForAssignment = [];
         let allocationsLocked = false;
-        
         let modelVisibility = {}; 
         let modelTargets = {};    
+
+        // --- EXPORT / IMPORT LOGIC ---
+        function exportPersistentData() {
+            const data = localStorage.getItem('chatterTrackerData');
+            if (!data) {
+                showCustomAlert("No data found to export. Please process some CSV files first.");
+                return;
+            }
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `chatter_tracker_backup_${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importPersistentData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    // Simple validation check
+                    if (!importedData.shiftAllocations || !importedData.quarterData) {
+                        throw new Error("Invalid backup file format.");
+                    }
+
+                    if (confirm("Importing this file will overwrite your current settings. Continue?")) {
+                        localStorage.setItem('chatterTrackerData', JSON.stringify(importedData));
+                        showCustomAlert("Import Successful! Reloading page...");
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                } catch (err) {
+                    showCustomAlert("Error: Could not read backup file. " + err.message);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // Reset input
+        }
 
         // --- PERSISTENCE FUNCTIONS ---
         function saveData() {
@@ -191,7 +243,7 @@
                 indicator.style.opacity = '1';
                 setTimeout(() => { indicator.style.opacity = '0'; }, 2000);
             } catch (e) {
-                console.warn('Failed to save to local storage (likely quota exceeded or private browsing):', e);
+                console.warn('Failed to save to local storage:', e);
             }
         }
 
@@ -202,7 +254,6 @@
                 const saved = JSON.parse(json);
                 quarterData = saved.quarterData || { q1: null, q2: null, q3: null, q4: null };
                 
-                // Deep merge or re-assign allocations to ensure structure integrity
                 if(saved.shiftAllocations) {
                     shiftAllocations[1] = saved.shiftAllocations[1] || { groups: [] };
                     shiftAllocations[2] = saved.shiftAllocations[2] || { groups: [] };
@@ -213,7 +264,6 @@
                 modelTargets = saved.modelTargets || {};
                 allocationsLocked = saved.allocationsLocked || false;
 
-                // Update UI Indicators for Quarters
                 ['q1', 'q2', 'q3', 'q4'].forEach(q => {
                     if (quarterData[q]) {
                         const statusEl = document.getElementById(`${q}-status`);
@@ -222,7 +272,6 @@
                     }
                 });
 
-                // If we have data, we must rebuild the chatter lists
                 if (quarterData.q1 || quarterData.q2 || quarterData.q3 || quarterData.q4) {
                     rebuildDataStructures();
                     document.getElementById('allocation-section').classList.remove('hidden');
@@ -440,7 +489,6 @@
                                 
                                 let textColor = 'text-gray-900'; let fontWeight = 'font-normal';
                                 
-                                // Color Logic (Trend)
                                 let previousValue = null;
                                 if (slotIdx > 0) {
                                     const prevQSlot = allQuarterSlots[slotIdx - 1];
@@ -457,11 +505,11 @@
 
                                 const hasData = metricDef.isTime ? isValidTime : value > 0;
                                 if (hasData) {
-                                    if (slotIdx === 0) { // Q1 vs Target
+                                    if (slotIdx === 0) { 
                                         const bad = metricDef.isTime ? value > targetValue : value < targetValue;
                                         textColor = bad ? 'text-red-600' : 'text-green-600';
                                         fontWeight = 'font-bold';
-                                    } else if (previousValue !== null) { // Q2+ vs Prev
+                                    } else if (previousValue !== null) {
                                         if (metricDef.isTime) {
                                             if (value < previousValue) { textColor = 'text-green-600'; fontWeight = 'font-bold'; }
                                             else if (value > previousValue) { textColor = 'text-red-600'; fontWeight = 'font-bold'; }
@@ -473,7 +521,6 @@
                                         }
                                     }
                                 }
-
                                 html += `<td class="px-1 py-1 text-center ${textColor} ${fontWeight} ${color.bg} ${bottomBorder}" style="${isLastMetric ? 'border-bottom-width: 1px;' : ''} white-space: nowrap; vertical-align: middle;">${displayValue}</td>`;
                             });
 
@@ -496,10 +543,7 @@
             return html;
         }
 
-        // --- PROCESSING LOGIC ---
         function rebuildDataStructures() {
-            // This function takes quarterData and rebuilds allChatters, allModels, chatterModels
-            // It allows us to reload data from memory without reparsing files
             const quarters = ['q1', 'q2', 'q3', 'q4'];
             const allChattersSet = new Set();
             quarters.forEach(q => {
@@ -560,19 +604,15 @@
                         statusEl.textContent = '✓ (New)';
                         statusEl.className = 'text-xs text-green-600';
                         hasNewData = true;
-                    } else if (!quarterData[quarters[i]]) {
-                         // Only clear status if we don't have existing data
-                        statusEl.textContent = '';
                     }
                 }
 
                 if (!hasNewData && !quarterData.q1 && !quarterData.q2 && !quarterData.q3 && !quarterData.q4) {
-                    throw new Error('Please upload at least one CSV file or check if previous data was restored.');
+                    throw new Error('Please upload at least one CSV file.');
                 }
 
                 rebuildDataStructures();
-                saveData(); // Save to local storage
-
+                saveData(); 
                 updateAllocationStatus();
                 allocationSection.classList.remove('hidden');
                 initializeAllocation();
@@ -596,8 +636,6 @@
         function initializeAllocation() {
             if (allocationsLocked) {
                 for (let shift = 1; shift <= 3; shift++) renderGroups(shift);
-                document.getElementById('lock-allocations-btn').textContent = 'Allocations Locked - Processing Data';
-                document.getElementById('lock-allocations-btn').classList.add('opacity-50', 'cursor-not-allowed');
                 return;
             }
             for (let shift = 1; shift <= 3; shift++) {
@@ -623,36 +661,21 @@
                 return;
             }
             allocationsLocked = true;
-            saveData(); // Save lock state
+            saveData(); 
             generateReport();
         }
 
         function resetAllocations() {
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 mb-4 font-semibold">Reset all groupings and allocations?</p>
-                    <div class="flex justify-end gap-3">
-                        <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
-                        <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmReset(); this.closest('.fixed').remove()">Reset</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-
-        function confirmReset() {
-            shiftAllocations[1].groups = [];
-            shiftAllocations[2].groups = [];
-            shiftAllocations[3].groups = [];
-            allocationsLocked = false;
-            // Note: We do NOT reset targets/visibility here, only groups
-            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
-            document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
-            updateAllocationStatus();
-            saveData(); // Save reset
-            initializeAllocation();
+            if (confirm("Reset all groupings and allocations?")) {
+                shiftAllocations[1].groups = [];
+                shiftAllocations[2].groups = [];
+                shiftAllocations[3].groups = [];
+                allocationsLocked = false;
+                document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
+                updateAllocationStatus();
+                saveData(); 
+                initializeAllocation();
+            }
         }
 
         function renderUnassignedChatters(shift) {
@@ -665,7 +688,7 @@
             const filteredUnassigned = unassigned.filter(c => c.toLowerCase().includes(searchTerm));
 
             if (filteredUnassigned.length === 0) {
-                container.innerHTML = searchTerm ? `<p class="text-gray-500 text-sm">No chatters found matching "${searchTerm}"</p>` : '<p class="text-gray-500 text-sm">All chatters have been assigned</p>';
+                container.innerHTML = '<p class="text-gray-500 text-sm">No unassigned chatters</p>';
                 return;
             }
 
@@ -673,9 +696,7 @@
             container.innerHTML = filteredUnassigned.map(chatter => {
                 const isSelected = selectedChattersForAssignment.includes(chatter);
                 const bgClass = isAssignmentMode ? (isSelected ? 'bg-[#5D5CDE]' : 'bg-green-200') : 'bg-gray-200';
-                const hoverClass = isAssignmentMode ? (isSelected ? 'hover:bg-[#4D4CCE]' : 'hover:bg-green-300') : 'hover:bg-gray-300';
-                const textColor = isSelected ? 'text-white' : 'text-gray-800';
-                return `<span class="chatter-tag ${bgClass} ${textColor} px-3 py-2 rounded-md text-sm cursor-pointer ${hoverClass}" data-chatter="${chatter}">${chatter}${isSelected ? ' ✓' : ''}</span>`;
+                return `<span class="chatter-tag ${bgClass} px-3 py-2 rounded-md text-sm cursor-pointer" data-chatter="${chatter}">${chatter}${isSelected ? ' ✓' : ''}</span>`;
             }).join('');
 
             if (isAssignmentMode && currentAssignmentGroupId) {
@@ -696,77 +717,32 @@
             const managerNameInput = document.getElementById(`shift-${shift}-manager-name`);
             const groupName = groupNameInput.value.trim();
             const managerName = managerNameInput.value.trim();
-
-            if (!groupName || !managerName) {
-                showCustomAlert('Please enter both group name and manager name');
-                return;
-            }
-
+            if (!groupName || !managerName) return;
             const group = { id: Date.now(), name: groupName, manager: managerName, chatters: [] };
             shiftAllocations[shift].groups.push(group);
-            groupNameInput.value = '';
-            managerNameInput.value = '';
-            saveData(); // Save
-            renderGroups(shift);
-        }
-
-        function editGroup(shift, groupId) {
-            const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
-            if (!group) return;
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.id = 'edit-group-modal';
-            modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Edit Group</h3>
-                    <div class="space-y-3">
-                        <div><label class="block text-sm font-medium text-gray-700">Group Name</label><input type="text" id="modal-group-name" value="${group.name}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"></div>
-                        <div><label class="block text-sm font-medium text-gray-700">Manager Name</label><input type="text" id="modal-manager-name" value="${group.manager}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"></div>
-                    </div>
-                    <div class="flex justify-end gap-3 mt-5">
-                        <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="document.getElementById('edit-group-modal').remove()">Cancel</button>
-                        <button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="confirmEditGroup(${shift}, ${group.id})">Save</button>
-                    </div>
-                </div>`;
-            document.body.appendChild(modal);
-            document.getElementById('modal-group-name').focus();
-        }
-
-        function confirmEditGroup(shift, groupId) {
-            const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
-            if (!group) return;
-            const newName = document.getElementById('modal-group-name').value.trim();
-            const newManager = document.getElementById('modal-manager-name').value.trim();
-            if (!newName || !newManager) { showCustomAlert('Fields cannot be empty.'); return; }
-            group.name = newName;
-            group.manager = newManager;
-            document.getElementById('edit-group-modal').remove();
-            saveData(); // Save
-            renderGroups(shift);
+            groupNameInput.value = ''; managerNameInput.value = '';
+            saveData(); renderGroups(shift);
         }
 
         function renderGroups(shift) {
             const container = document.getElementById(`shift-${shift}-groups`);
             container.innerHTML = shiftAllocations[shift].groups.map(group => {
                 const isActive = currentAssignmentGroupId === group.id && currentAssignmentShift === shift;
-                const borderClass = isActive ? 'border-green-500 border-4 shadow-lg' : 'border-[#5D5CDE] border-2';
                 return `
-                <div class="bg-white rounded-lg p-4 ${borderClass}">
+                <div class="bg-white rounded-lg p-4 border-2 ${isActive ? 'border-green-500 shadow-lg' : 'border-[#5D5CDE]'}">
                     <div class="flex justify-between items-center mb-3">
-                        <div><h4 class="font-bold text-gray-900">${group.name} ${isActive ? '← ACTIVE' : ''}</h4><p class="text-sm text-gray-600">Manager: ${group.manager}</p></div>
+                        <div><h4 class="font-bold text-gray-900">${group.name}</h4><p class="text-sm text-gray-600">Manager: ${group.manager}</p></div>
                         <div class="flex gap-2">
-                            <button onclick="editGroup(${shift}, ${group.id})" class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm px-3 py-1 rounded-md">Edit</button>
-                            <button onclick="assignChatterToGroup(${shift}, ${group.id})" class="bg-green-500 hover:bg-green-600 text-white text-sm px-3 py-1 rounded-md">+ Assign</button>
-                            <button onclick="removeGroup(${shift}, ${group.id})" class="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-md">Remove</button>
+                            <button onclick="assignChatterToGroup(${shift}, ${group.id})" class="bg-green-500 text-white text-sm px-3 py-1 rounded">+ Assign</button>
+                            <button onclick="removeGroup(${shift}, ${group.id})" class="bg-red-500 text-white text-sm px-3 py-1 rounded">Remove</button>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2">
                         ${group.chatters.length > 0 ? group.chatters.map(chatter => 
                             `<span class="bg-[#5D5CDE] text-white px-3 py-1 rounded-md text-sm flex items-center gap-2">${chatter}
-                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="hover:text-yellow-300 text-xs" title="Manage Models">⚙️</button>
-                                <button onclick="removeChatterFromGroup(${shift}, ${group.id}, '${chatter}')" class="hover:text-red-300">×</button>
-                            </span>`
-                        ).join('') : '<p class="text-gray-500 text-sm italic">No chatters assigned yet</p>'}
+                                <button onclick="manageChatterModels(${shift}, ${group.id}, '${chatter}')" class="text-xs">⚙️</button>
+                                <button onclick="removeChatterFromGroup(${shift}, ${group.id}, '${chatter}')">×</button>
+                            </span>`).join('') : '<p class="text-gray-500 text-sm">No chatters assigned</p>'}
                     </div>
                 </div>`;
             }).join('');
@@ -780,7 +756,6 @@
             currentAssignmentShift = shift;
             currentAssignmentGroupId = groupId;
             selectedChattersForAssignment = [];
-            renderGroups(shift);
             updateAssignmentBanner(shift);
             renderUnassignedChatters(shift);
         }
@@ -789,58 +764,28 @@
             const container = document.getElementById(`shift-${shift}-unassigned`);
             const existingBanner = document.getElementById('assignment-banner');
             if (existingBanner) existingBanner.remove();
-            const group = shiftAllocations[shift].groups.find(g => g.id === currentAssignmentGroupId);
-            if (!group) return;
-            const assignedChatters = new Set();
-            shiftAllocations[shift].groups.forEach(g => g.chatters.forEach(c => assignedChatters.add(c)));
-            const unassigned = allChatters.filter(c => !assignedChatters.has(c));
-            const selectedCount = selectedChattersForAssignment.length;
-
+            
             const banner = document.createElement('div');
             banner.id = 'assignment-banner';
-            banner.className = 'bg-green-100 border-2 border-green-500 rounded-lg p-3 mb-3 space-y-3';
+            banner.className = 'bg-green-100 border-2 border-green-500 rounded-lg p-3 mb-3 flex justify-between items-center';
             banner.innerHTML = `
-                <div class="flex justify-between items-center gap-4">
-                    <div><p class="text-green-800 font-semibold">Assigning to "${group.name}"</p><p class="text-green-700 text-sm mt-1">Click chatters to select (${selectedCount} selected)</p></div>
-                    <div class="flex gap-2">
-                        ${unassigned.length > 0 ? `<button onclick="selectAllUnassigned(${shift})" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-md">Select All</button>` : ''}
-                        ${selectedCount > 0 ? `<button onclick="deselectAll(${shift})" class="bg-orange-500 hover:bg-orange-600 text-white text-sm px-3 py-2 rounded-md">Clear</button>` : ''}
-                        ${selectedCount > 0 ? `<button onclick="confirmAssignment(${shift})" class="bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold px-4 py-2 rounded-md">Assign</button>` : ''}
-                        <button onclick="cancelAssignment(${shift})" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-md">Cancel</button>
-                    </div>
-                </div>
-                <div><input type="text" id="chatter-search-input-${shift}" oninput="renderUnassignedChatters(${shift})" placeholder="Type to search..." class="w-full px-4 py-2 text-base border border-gray-300 rounded-md bg-white text-gray-900"></div>`;
+                <div><p class="text-green-800 font-semibold">Assigning to Group</p></div>
+                <div class="flex gap-2">
+                    <button onclick="confirmAssignment(${shift})" class="bg-[#5D5CDE] text-white px-4 py-1 rounded">Confirm</button>
+                    <button onclick="cancelAssignment(${shift})" class="bg-gray-500 text-white px-4 py-1 rounded">Cancel</button>
+                </div>`;
             container.parentElement.insertBefore(banner, container);
-            document.getElementById(`chatter-search-input-${shift}`).focus();
-        }
-
-        function selectAllUnassigned(shift) {
-            const assignedChatters = new Set();
-            shiftAllocations[shift].groups.forEach(g => g.chatters.forEach(c => assignedChatters.add(c)));
-            selectedChattersForAssignment = allChatters.filter(c => !assignedChatters.has(c));
-            renderUnassignedChatters(shift);
-            updateAssignmentBanner(shift);
-        }
-
-        function deselectAll(shift) {
-            selectedChattersForAssignment = [];
-            renderUnassignedChatters(shift);
-            updateAssignmentBanner(shift);
         }
 
         function confirmAssignment(shift) {
             const group = shiftAllocations[shift].groups.find(g => g.id === currentAssignmentGroupId);
-            if (group && selectedChattersForAssignment.length > 0) {
+            if (group) {
                 selectedChattersForAssignment.forEach(chatter => {
                     if (!group.chatters.includes(chatter)) group.chatters.push(chatter);
                 });
             }
-            selectedChattersForAssignment = [];
-            currentAssignmentShift = null;
-            currentAssignmentGroupId = null;
-            if(document.getElementById('assignment-banner')) document.getElementById('assignment-banner').remove();
-            saveData(); // Save
-            renderGroups(shift);
+            cancelAssignment(shift);
+            saveData();
         }
 
         function cancelAssignment(shift) {
@@ -849,22 +794,16 @@
             currentAssignmentGroupId = null;
             if(document.getElementById('assignment-banner')) document.getElementById('assignment-banner').remove();
             renderGroups(shift);
-            renderUnassignedChatters(shift);
         }
 
         function removeChatterFromGroup(shift, groupId, chatter) {
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
-            if (group) {
-                group.chatters = group.chatters.filter(c => c !== chatter);
-                saveData(); // Save
-                renderGroups(shift);
-            }
+            if (group) { group.chatters = group.chatters.filter(c => c !== chatter); saveData(); renderGroups(shift); }
         }
 
         function removeGroup(shift, groupId) {
             shiftAllocations[shift].groups = shiftAllocations[shift].groups.filter(g => g.id !== groupId);
-            saveData(); // Save
-            renderGroups(shift);
+            saveData(); renderGroups(shift);
         }
 
         function manageChatterModels(shift, groupId, chatterName) {
@@ -878,57 +817,43 @@
                 const t = modelTargets[modelName] || DEFAULT_TARGETS;
 
                 return `
-                <div class="bg-gray-50 p-3 rounded-md border border-gray-200">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="flex items-center gap-2 cursor-pointer select-none">
-                            <input type="checkbox" class="form-checkbox h-5 w-5 text-[#5D5CDE] rounded model-visible-check" data-model-name="${modelName}" ${isVisible ? 'checked' : ''}>
-                            <span class="text-gray-800 font-semibold">${modelName}</span>
-                        </label>
-                        <button onclick="toggleTargetEdit('target-edit-${index}')" class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded border border-purple-300">📉 Targets</button>
+                <div class="bg-gray-50 p-3 rounded-md border border-gray-200 mb-2">
+                    <div class="flex justify-between items-center">
+                        <label class="flex items-center gap-2"><input type="checkbox" class="model-visible-check" data-model-name="${modelName}" ${isVisible ? 'checked' : ''}> <b>${modelName}</b></label>
+                        <button onclick="toggleTargetEdit('target-edit-${index}')" class="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Targets</button>
                     </div>
-                    <div id="target-edit-${index}" class="hidden mt-2 pt-2 border-t border-gray-200 grid grid-cols-2 gap-2 text-xs">
-                        <div class="col-span-2 mb-1 font-bold text-gray-500">Target per 2-Hr Quarter</div>
-                        <div><label class="block text-gray-600">Messages</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-msg-${index}" value="${t.messagesSent}"></div>
-                        <div><label class="block text-gray-600">Fans</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-fan-${index}" value="${t.fansChatted}"></div>
-                        <div><label class="block text-gray-600">PPVs Sent</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvs-${index}" value="${t.ppvsSent}"></div>
-                        <div><label class="block text-gray-600">PPVs Open</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-ppvo-${index}" value="${t.ppvsOpen}"></div>
-                        <div><label class="block text-gray-600">Resp Time</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-resp-${index}" value="${t.responseTime}"></div>
-                        <div><label class="block text-gray-600">Revenue</label><input type="number" class="w-full border border-gray-300 rounded px-1 py-1" id="t-rev-${index}" value="${t.revenue}"></div>
-                        <button onclick="saveSpecificTarget('${modelName}', ${index})" class="col-span-2 mt-2 bg-green-500 hover:bg-green-600 text-white py-1 rounded">Save Targets</button>
+                    <div id="target-edit-${index}" class="hidden mt-2 pt-2 border-t grid grid-cols-2 gap-2 text-xs">
+                        <div>Messages<input type="number" class="w-full border p-1" id="t-msg-${index}" value="${t.messagesSent}"></div>
+                        <div>Fans<input type="number" class="w-full border p-1" id="t-fan-${index}" value="${t.fansChatted}"></div>
+                        <div>PPVs<input type="number" class="w-full border p-1" id="t-ppvs-${index}" value="${t.ppvsSent}"></div>
+                        <div>Revenue<input type="number" class="w-full border p-1" id="t-rev-${index}" value="${t.revenue}"></div>
+                        <button onclick="saveSpecificTarget('${modelName}', ${index})" class="col-span-2 bg-green-500 text-white py-1 rounded">Save Targets</button>
                     </div>
                 </div>`;
             }).join('');
-
-            if (chatterModelsList.length === 0) modelsHTML = '<p class="text-sm text-gray-500">No models found for this chatter.</p>';
 
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             modal.id = 'model-manage-modal';
             modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4 flex flex-col max-h-[85vh]">
-                    <div class="flex justify-between items-center mb-4"><h3 class="text-lg font-semibold text-gray-900">Manage Models: ${chatterName}</h3><button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button></div>
-                    <div class="space-y-3 overflow-y-auto flex-1 pr-2" id="model-checkbox-list">${modelsHTML}</div>
-                    <div class="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-100"><button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded w-full" onclick="saveModelVisibility('${chatterName}')">Done</button></div>
+                <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+                    <h3 class="font-bold mb-4">Manage Models: ${chatterName}</h3>
+                    ${modelsHTML}
+                    <button class="mt-4 px-4 py-2 bg-[#5D5CDE] text-white rounded w-full" onclick="saveModelVisibility('${chatterName}')">Done</button>
                 </div>`;
             document.body.appendChild(modal);
         }
 
         window.toggleTargetEdit = function(id) { document.getElementById(id).classList.toggle('hidden'); }
-
         window.saveSpecificTarget = function(modelName, index) {
             modelTargets[modelName] = {
                 messagesSent: parseInt(document.getElementById(`t-msg-${index}`).value) || 0,
                 fansChatted: parseInt(document.getElementById(`t-fan-${index}`).value) || 0,
                 ppvsSent: parseInt(document.getElementById(`t-ppvs-${index}`).value) || 0,
-                ppvsOpen: parseInt(document.getElementById(`t-ppvo-${index}`).value) || 0,
-                revenue: parseInt(document.getElementById(`t-rev-${index}`).value) || 0,
-                responseTime: parseFloat(document.getElementById(`t-resp-${index}`).value) || 0
+                ppvsOpen: 0, revenue: parseInt(document.getElementById(`t-rev-${index}`).value) || 0,
+                responseTime: 6
             };
-            const btn = document.querySelector(`#target-edit-${index} button`);
-            const originalText = btn.textContent;
-            btn.textContent = "Saved!";
-            btn.classList.add('bg-green-700');
-            setTimeout(() => { btn.textContent = originalText; btn.classList.remove('bg-green-700'); }, 1500);
+            showCustomAlert("Target Saved for " + modelName);
         }
 
         function saveModelVisibility(chatterName) {
@@ -936,153 +861,35 @@
             document.querySelectorAll('.model-visible-check').forEach(checkbox => prefs[checkbox.dataset.modelName] = checkbox.checked);
             modelVisibility[chatterName] = prefs;
             document.getElementById('model-manage-modal').remove();
-            saveData(); // Save
-            if(allocationsLocked) generateReport();
+            saveData(); if(allocationsLocked) generateReport();
         }
-
-        document.querySelectorAll('.shift-tab').forEach(tab => {
-            tab.addEventListener('click', function() {
-                const shift = this.dataset.shift;
-                document.querySelectorAll('.shift-tab').forEach(t => { t.classList.remove('bg-[#5D5CDE]', 'text-white'); t.classList.add('text-gray-600'); });
-                this.classList.add('bg-[#5D5CDE]', 'text-white'); this.classList.remove('text-gray-600');
-                document.querySelectorAll('.shift-content').forEach(c => c.classList.add('hidden'));
-                document.getElementById(`shift-${shift}-content`).classList.remove('hidden');
-            });
-        });
 
         function generateReport() {
             const resultsContainer = document.getElementById('results-container');
-            const results = document.getElementById('results');
-            const allocationSection = document.getElementById('allocation-section');
             resultsContainer.innerHTML = '';
             const quarters = ['q1', 'q2', 'q3', 'q4'];
             const quarterLabels = quarters.map((q, i) => quarterData[q] ? `Q${i + 1}` : null).filter(q => q);
 
             for (let shift = 1; shift <= 3; shift++) {
                 if (shiftAllocations[shift].groups.length === 0) continue;
-                let shiftHTML = `<div class="page-break-after mb-6"><h2 class="text-xl font-bold text-gray-900 mb-3 pb-1 border-b-2 border-[#5D5CDE]">Shift ${shift}</h2>`;
-
-                shiftAllocations[shift].groups.forEach((group, groupIndex) => {
-                    const groupReportId = `group-report-${shift}-${group.id}`;
-                    const safeFilename = `${group.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
-                    const safeManagerName = `${group.manager.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
-                    const groupBgClass = groupIndex % 2 === 0 ? 'bg-gray-50' : 'bg-blue-50';
-                    shiftHTML += `
-                        <div id="${groupReportId}" class="mb-12 p-3 ${groupBgClass} rounded border-8 border-black">
-                            <div class="mb-2 pb-1 border-b border-gray-300 flex justify-between items-center">
-                                <h3 class="text-lg font-bold text-[#5D5CDE] w-1/3">${group.name}</h3>
-                                <div class="w-1/3 text-center"><span class="text-xl font-semibold text-gray-700">Manager: ${group.manager}</span></div>
-                                <div class="flex gap-2 no-print w-1/3 justify-end">
-                                    <button onclick="downloadAllSections(this, '${groupReportId}', '${safeFilename}', '${safeManagerName}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1 px-2 rounded">Download All Sections</button>
-                                    <button onclick="copyGroupImage(this, '${groupReportId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">Copy All (Full)</button>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 gap-2">`;
-
-                    const chattersPerSection = 5;
-                    let chatterBuffer = '';
-                    group.chatters.forEach((chatter, chatterIndex) => {
+                let shiftHTML = `<div class="mb-6"><h2 class="text-xl font-bold border-b-2 border-[#5D5CDE]">Shift ${shift}</h2>`;
+                shiftAllocations[shift].groups.forEach(group => {
+                    shiftHTML += `<div class="mt-4 p-3 border-8 border-black rounded bg-gray-50">
+                        <div class="flex justify-between mb-2"><b>${group.name}</b> <span>Manager: ${group.manager}</span></div>
+                        <div class="grid grid-cols-1 gap-2">`;
+                    group.chatters.forEach(chatter => {
                         if (chatterModels[chatter]) {
-                            const allChatterModels = chatterModels[chatter];
                             const visibility = modelVisibility[chatter] || {};
-                            const visibleModels = allChatterModels.filter(m => visibility[m.model] === undefined ? true : visibility[m.model]);
-                            if (visibleModels.length > 0) chatterBuffer += createChatterTable(chatter, visibleModels, quarterLabels);
-                        }
-                        if ((chatterIndex + 1) % chattersPerSection === 0 || chatterIndex === group.chatters.length - 1) {
-                            const sectionIndex = Math.floor(chatterIndex / chattersPerSection);
-                            const sectionId = `${groupReportId}-section-${sectionIndex}`;
-                            shiftHTML += `<div id="${sectionId}" class="mb-4 p-3 bg-gray-100 rounded border border-gray-300 relative">
-                                <div class="export-header hidden mb-4 p-4 bg-[#5D5CDE] text-white text-center rounded-t shadow-md border-b-4 border-[#220e30]">
-                                    <h1 class="text-3xl font-bold uppercase tracking-wider">${group.name}</h1>
-                                    <h2 class="text-xl font-semibold mt-1 opacity-90">Manager: ${group.manager}</h2>
-                                </div>
-                                ${chatterBuffer}
-                                <div class="flex gap-2 justify-end no-print mt-2 -mr-1 -mb-1">
-                                    <button onclick="downloadGroupImage(this, '${sectionId}', '${safeFilename}_sect${sectionIndex+1}')" class="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-1 px-2 rounded">Download</button>
-                                    <button onclick="copyGroupImage(this, '${sectionId}')" class="bg-green-500 hover:bg-green-600 text-white text-xs font-semibold py-1 px-2 rounded">Copy</button>
-                                </div></div>`;
-                            chatterBuffer = '';
+                            const visibleModels = chatterModels[chatter].filter(m => visibility[m.model] !== false);
+                            if (visibleModels.length > 0) shiftHTML += createChatterTable(chatter, visibleModels, quarterLabels);
                         }
                     });
                     shiftHTML += `</div></div>`;
                 });
-                shiftHTML += `</div>`;
-                resultsContainer.innerHTML += shiftHTML;
+                resultsContainer.innerHTML += shiftHTML + `</div>`;
             }
-            allocationSection.classList.add('hidden');
-            results.classList.remove('hidden');
-        }
-
-        // --- EXPORT FUNCTIONS ---
-        function generateGroupBlob(elementId) {
-            return new Promise((resolve, reject) => {
-                const element = document.getElementById(elementId);
-                const originalBg = element.style.backgroundColor;
-                const originalFontSize = element.style.fontSize;
-                element.style.backgroundColor = '#ffffff'; element.style.fontSize = '18pt';
-                element.querySelectorAll('.no-print').forEach(btn => btn.style.display = 'none');
-                html2canvas(element, {
-                    scale: 4, useCORS: true, window: window,
-                    onclone: (clonedDoc) => {
-                        const clonedElement = clonedDoc.getElementById(elementId);
-                        clonedElement.style.backgroundColor = originalBg; clonedElement.style.fontSize = '18pt';
-                        clonedDoc.querySelectorAll('.no-print').forEach(btn => btn.style.display = 'none');
-                        const header = clonedElement.querySelector('.export-header');
-                        if (header) { header.classList.remove('hidden'); header.style.display = 'block'; }
-                    }
-                }).then(canvas => {
-                    element.style.backgroundColor = originalBg; element.style.fontSize = originalFontSize;
-                    element.querySelectorAll('.no-print').forEach(btn => btn.style.display = '');
-                    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas failed')), 'image/png');
-                }).catch(err => {
-                    element.style.backgroundColor = originalBg; element.style.fontSize = originalFontSize;
-                    element.querySelectorAll('.no-print').forEach(btn => btn.style.display = '');
-                    reject(err);
-                });
-            });
-        }
-
-        async function downloadAllSections(buttonEl, groupReportId, groupName, managerName) {
-            const originalText = buttonEl.innerHTML;
-            buttonEl.disabled = true;
-            try {
-                const groupElement = document.getElementById(groupReportId);
-                const sectionElements = groupElement.querySelectorAll(`[id^="${groupReportId}-section-"]`);
-                if (sectionElements.length === 0) { showCustomAlert('No sections found.'); return; }
-                for (let i = 0; i < sectionElements.length; i++) {
-                    buttonEl.innerHTML = `... (${i+1}/${sectionElements.length})`;
-                    const blob = await generateGroupBlob(sectionElements[i].id);
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `${groupName}_${managerName}_section_${i+1}.png`;
-                    document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
-            } catch (err) { console.error(err); showCustomAlert('Download error.'); } 
-            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
-        }
-
-        async function downloadGroupImage(buttonEl, elementId, filename) {
-            const originalText = buttonEl.innerHTML; buttonEl.innerHTML = '...'; buttonEl.disabled = true;
-            try {
-                const blob = await generateGroupBlob(elementId);
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = filename + ".png";
-                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
-            } catch (err) { console.error(err); showCustomAlert('Download error.'); }
-            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
-        }
-
-        async function copyGroupImage(buttonEl, elementId) {
-            if (!navigator.clipboard || !navigator.clipboard.write) { showCustomAlert('Clipboard not supported.'); return; }
-            const originalText = buttonEl.innerHTML; buttonEl.innerHTML = '...'; buttonEl.disabled = true;
-            try {
-                const blob = await generateGroupBlob(elementId);
-                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                showCustomAlert('Copied to clipboard!');
-            } catch (err) { console.error(err); showCustomAlert('Copy error.'); }
-            finally { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }
+            document.getElementById('allocation-section').classList.add('hidden');
+            document.getElementById('results').classList.remove('hidden');
         }
 
         function showAllocationSection() {
@@ -1093,59 +900,20 @@
         function showCustomAlert(message) {
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 mb-4">${message}</p>
-                    <div class="flex justify-end"><button class="px-4 py-2 bg-[#5D5CDE] text-white hover:bg-[#4D4CCE] rounded" onclick="this.closest('.fixed').remove()">OK</button></div>
-                </div>`;
+            modal.innerHTML = `<div class="bg-white p-6 rounded shadow-lg"><p>${message}</p><button class="mt-4 px-4 py-1 bg-[#5D5CDE] text-white rounded" onclick="this.closest('.fixed').remove()">OK</button></div>`;
             document.body.appendChild(modal);
         }
 
         function clearAll() {
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 mb-4 font-semibold">Clear everything?</p>
-                    <p class="text-gray-600 text-sm mb-4">This will wipe all data from memory.</p>
-                    <div class="flex justify-end gap-3">
-                        <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
-                        <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmClearAll(); this.closest('.fixed').remove()">Clear All</button>
-                    </div>
-                </div>`;
-            document.body.appendChild(modal);
+            if(confirm("Wipe all data from memory?")) {
+                localStorage.removeItem('chatterTrackerData');
+                location.reload();
+            }
         }
 
-        function confirmClearAll() {
-            document.getElementById('file-q1').value = ''; document.getElementById('file-q2').value = '';
-            document.getElementById('file-q3').value = ''; document.getElementById('file-q4').value = '';
-            quarterData = { q1: null, q2: null, q3: null, q4: null };
-            document.getElementById('q1-status').textContent = ''; document.getElementById('q2-status').textContent = '';
-            document.getElementById('q3-status').textContent = ''; document.getElementById('q4-status').textContent = '';
-            
-            shiftAllocations[1].groups = []; shiftAllocations[2].groups = []; shiftAllocations[3].groups = [];
-            allocationsLocked = false;
-            allChatters = []; allModels = {}; chatterModels = {}; modelVisibility = {}; modelTargets = {};
-            
-            localStorage.removeItem('chatterTrackerData'); // Clear storage
-            
-            document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
-            document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
-            document.getElementById('allocation-section').classList.add('hidden');
-            document.getElementById('results').classList.add('hidden');
-            document.getElementById('error-container').classList.add('hidden');
-            updateAllocationStatus();
-        }
-
-        document.addEventListener('DOMContentLoaded', (event) => {
-            loadData(); // Load saved data on startup
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
             document.getElementById('process-btn').addEventListener('click', processAllFiles);
-            window.addEventListener('beforeunload', function (e) {
-                // Warning not needed as much now due to auto-save, but good as a backup
-                if ((quarterData.q1 || allChatters.length > 0) && !localStorage.getItem('chatterTrackerData')) {
-                    e.preventDefault(); e.returnValue = '';
-                }
-            });
         });
     </script>
 </body>
