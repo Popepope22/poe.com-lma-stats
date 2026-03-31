@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,8 +64,13 @@
                 </div>
             </div>
 
-            <div class="flex gap-3">
+            <div class="flex flex-wrap gap-3">
                 <button id="process-btn" class="flex-1 bg-[#5D5CDE] hover:bg-[#4D4CCE] text-white font-semibold py-3 px-6 rounded-md transition duration-200">Process Files / Refresh Data</button>
+                
+                <button onclick="exportPersistence()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Export Backup</button>
+                <button onclick="document.getElementById('import-input').click()" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Import Backup</button>
+                <input type="file" id="import-input" accept=".json" class="hidden" onchange="importPersistence(event)">
+                
                 <button id="clear-all-btn" onclick="clearAll()" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-md transition duration-200">Clear All & Reset</button>
             </div>
         </div>
@@ -202,7 +206,6 @@
                 const saved = JSON.parse(json);
                 quarterData = saved.quarterData || { q1: null, q2: null, q3: null, q4: null };
                 
-                // Deep merge or re-assign allocations to ensure structure integrity
                 if(saved.shiftAllocations) {
                     shiftAllocations[1] = saved.shiftAllocations[1] || { groups: [] };
                     shiftAllocations[2] = saved.shiftAllocations[2] || { groups: [] };
@@ -213,7 +216,6 @@
                 modelTargets = saved.modelTargets || {};
                 allocationsLocked = saved.allocationsLocked || false;
 
-                // Update UI Indicators for Quarters
                 ['q1', 'q2', 'q3', 'q4'].forEach(q => {
                     if (quarterData[q]) {
                         const statusEl = document.getElementById(`${q}-status`);
@@ -222,7 +224,6 @@
                     }
                 });
 
-                // If we have data, we must rebuild the chatter lists
                 if (quarterData.q1 || quarterData.q2 || quarterData.q3 || quarterData.q4) {
                     rebuildDataStructures();
                     document.getElementById('allocation-section').classList.remove('hidden');
@@ -238,6 +239,49 @@
             } catch (e) {
                 console.error("Failed to load saved data", e);
             }
+        }
+
+        // --- NEW: IMPORT/EXPORT LOGIC ---
+        function exportPersistence() {
+            const data = localStorage.getItem('chatterTrackerData');
+            if (!data) {
+                showCustomAlert("No data found in memory to export. Please process files first.");
+                return;
+            }
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `chatter_tracker_backup_${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importPersistence(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedContent = e.target.result;
+                    const parsed = JSON.parse(importedContent);
+                    if (!parsed.quarterData && !parsed.shiftAllocations) {
+                        throw new Error("This file doesn't look like a valid Chatter Tracker backup.");
+                    }
+                    const confirmImport = confirm("Importing this file will overwrite your current data. Proceed?");
+                    if (confirmImport) {
+                        localStorage.setItem('chatterTrackerData', importedContent);
+                        window.location.reload();
+                    }
+                } catch (err) {
+                    showCustomAlert("Error importing file: " + err.message);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
         }
 
         // --- TIME PARSING ---
@@ -440,7 +484,6 @@
                                 
                                 let textColor = 'text-gray-900'; let fontWeight = 'font-normal';
                                 
-                                // Color Logic (Trend)
                                 let previousValue = null;
                                 if (slotIdx > 0) {
                                     const prevQSlot = allQuarterSlots[slotIdx - 1];
@@ -457,11 +500,11 @@
 
                                 const hasData = metricDef.isTime ? isValidTime : value > 0;
                                 if (hasData) {
-                                    if (slotIdx === 0) { // Q1 vs Target
+                                    if (slotIdx === 0) {
                                         const bad = metricDef.isTime ? value > targetValue : value < targetValue;
                                         textColor = bad ? 'text-red-600' : 'text-green-600';
                                         fontWeight = 'font-bold';
-                                    } else if (previousValue !== null) { // Q2+ vs Prev
+                                    } else if (previousValue !== null) {
                                         if (metricDef.isTime) {
                                             if (value < previousValue) { textColor = 'text-green-600'; fontWeight = 'font-bold'; }
                                             else if (value > previousValue) { textColor = 'text-red-600'; fontWeight = 'font-bold'; }
@@ -496,10 +539,7 @@
             return html;
         }
 
-        // --- PROCESSING LOGIC ---
         function rebuildDataStructures() {
-            // This function takes quarterData and rebuilds allChatters, allModels, chatterModels
-            // It allows us to reload data from memory without reparsing files
             const quarters = ['q1', 'q2', 'q3', 'q4'];
             const allChattersSet = new Set();
             quarters.forEach(q => {
@@ -560,9 +600,6 @@
                         statusEl.textContent = '✓ (New)';
                         statusEl.className = 'text-xs text-green-600';
                         hasNewData = true;
-                    } else if (!quarterData[quarters[i]]) {
-                         // Only clear status if we don't have existing data
-                        statusEl.textContent = '';
                     }
                 }
 
@@ -571,8 +608,7 @@
                 }
 
                 rebuildDataStructures();
-                saveData(); // Save to local storage
-
+                saveData();
                 updateAllocationStatus();
                 allocationSection.classList.remove('hidden');
                 initializeAllocation();
@@ -623,7 +659,7 @@
                 return;
             }
             allocationsLocked = true;
-            saveData(); // Save lock state
+            saveData();
             generateReport();
         }
 
@@ -637,8 +673,7 @@
                         <button class="px-4 py-2 bg-gray-500 text-white hover:bg-gray-600 rounded" onclick="this.closest('.fixed').remove()">Cancel</button>
                         <button class="px-4 py-2 bg-red-500 text-white hover:bg-red-600 rounded" onclick="confirmReset(); this.closest('.fixed').remove()">Reset</button>
                     </div>
-                </div>
-            `;
+                </div>`;
             document.body.appendChild(modal);
         }
 
@@ -647,11 +682,10 @@
             shiftAllocations[2].groups = [];
             shiftAllocations[3].groups = [];
             allocationsLocked = false;
-            // Note: We do NOT reset targets/visibility here, only groups
             document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
             updateAllocationStatus();
-            saveData(); // Save reset
+            saveData();
             initializeAllocation();
         }
 
@@ -706,7 +740,7 @@
             shiftAllocations[shift].groups.push(group);
             groupNameInput.value = '';
             managerNameInput.value = '';
-            saveData(); // Save
+            saveData();
             renderGroups(shift);
         }
 
@@ -741,7 +775,7 @@
             group.name = newName;
             group.manager = newManager;
             document.getElementById('edit-group-modal').remove();
-            saveData(); // Save
+            saveData();
             renderGroups(shift);
         }
 
@@ -839,7 +873,7 @@
             currentAssignmentShift = null;
             currentAssignmentGroupId = null;
             if(document.getElementById('assignment-banner')) document.getElementById('assignment-banner').remove();
-            saveData(); // Save
+            saveData();
             renderGroups(shift);
         }
 
@@ -856,14 +890,14 @@
             const group = shiftAllocations[shift].groups.find(g => g.id === groupId);
             if (group) {
                 group.chatters = group.chatters.filter(c => c !== chatter);
-                saveData(); // Save
+                saveData();
                 renderGroups(shift);
             }
         }
 
         function removeGroup(shift, groupId) {
             shiftAllocations[shift].groups = shiftAllocations[shift].groups.filter(g => g.id !== groupId);
-            saveData(); // Save
+            saveData();
             renderGroups(shift);
         }
 
@@ -936,7 +970,7 @@
             document.querySelectorAll('.model-visible-check').forEach(checkbox => prefs[checkbox.dataset.modelName] = checkbox.checked);
             modelVisibility[chatterName] = prefs;
             document.getElementById('model-manage-modal').remove();
-            saveData(); // Save
+            saveData();
             if(allocationsLocked) generateReport();
         }
 
@@ -1127,7 +1161,7 @@
             allocationsLocked = false;
             allChatters = []; allModels = {}; chatterModels = {}; modelVisibility = {}; modelTargets = {};
             
-            localStorage.removeItem('chatterTrackerData'); // Clear storage
+            localStorage.removeItem('chatterTrackerData');
             
             document.getElementById('lock-allocations-btn').textContent = 'Lock Allocations & View Report';
             document.getElementById('lock-allocations-btn').classList.remove('opacity-50', 'cursor-not-allowed');
@@ -1138,10 +1172,9 @@
         }
 
         document.addEventListener('DOMContentLoaded', (event) => {
-            loadData(); // Load saved data on startup
+            loadData();
             document.getElementById('process-btn').addEventListener('click', processAllFiles);
             window.addEventListener('beforeunload', function (e) {
-                // Warning not needed as much now due to auto-save, but good as a backup
                 if ((quarterData.q1 || allChatters.length > 0) && !localStorage.getItem('chatterTrackerData')) {
                     e.preventDefault(); e.returnValue = '';
                 }
